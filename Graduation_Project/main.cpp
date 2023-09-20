@@ -6,7 +6,6 @@
 #include <cuda_gl_interop.h>
 #include <helper_cuda.h>
 int windowWidth = 800, windowHeight = 800;
-
 GLuint pbo_dest;
 GLuint texture;
 GLuint shader;
@@ -25,6 +24,7 @@ static const char* glsl_draw_fragmentShader =
 "}\n";
 extern "C" void generatePixel(dim3 grid, dim3 block, int sbytes,
     unsigned int* g_odata, int imgw);
+extern "C" void initWorld();
 void createPBO(GLuint* pbo, struct cudaGraphicsResource** pbo_resource) {
     // set up vertex data parameter
     num_texels = image_width * image_height;
@@ -240,6 +240,7 @@ void initGL(int *argc, char **argv) {
 
 int main(int argc,char **argv) {
     initGL(&argc, argv);
+    initWorld();
     findCudaDevice(argc, (const char **)argv);
 
 
