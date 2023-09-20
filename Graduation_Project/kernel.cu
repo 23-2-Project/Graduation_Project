@@ -1,85 +1,66 @@
-﻿
+﻿/* Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *  * Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *  * Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *  * Neither the name of NVIDIA CORPORATION nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY
+ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
+ * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+ // Utilities and system includes
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
-#include <GL/glew.h>
-#include <cuda_gl_interop.h>
-#include <GL/glut.h>
-#include <stdio.h>
-#include <windows.h>
-int windowWidth = 800, windowHeight = 800;
-
-GLuint pbo_dest;
-struct cudaGraphicsResource* cuda_pbo_dest_resource;
-unsigned int size_tex_data;
-unsigned int num_texels;
-unsigned int num_values;
-unsigned int image_width = 800;
-unsigned int image_height = 800;
-void createPBO(GLuint *pbo, struct cudaGraphicsResource **pbo_resource) {
-
-    num_texels = image_width * image_height;
-    num_values = num_texels * 4;
-    size_tex_data = sizeof(GLubyte) * num_values;
-    void* data = malloc(size_tex_data);
-
-    //예제에서는 GL_ARRAY_BUFFER인데 GL_PIXEL_UNPACK_BUFFER가 텍스쳐를 담는다고 함. 알아봐야될듯
-    glGenBuffers(1, pbo);
-    glBindBuffer(GL_ARRAY_BUFFER, *pbo);
-    glBufferData(GL_ARRAY_BUFFER, size_tex_data, data, GL_DYNAMIC_DRAW);
-    free(data);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    cudaGraphicsGLRegisterBuffer(pbo_resource, *pbo, cudaGraphicsMapFlagsNone);
-
-
-}
-void deletePBO(GLuint* pbo) {
-    glDeleteBuffers(1, pbo);
-    *pbo = 0;
+#include <math_functions.h>
+#include <ray.h>
+#include <sphere.h>
+#include <hittable_list.h>
+#include <material.h>
+#include <vec3.h>
+#include <camera.h>
+// convert floating point rgb color to 8-bit integer
+__device__ float clamp(float x, float a, float b) { return max(a, min(b, x)); }
+__device__ int rgbToInt(float r, float g, float b) {
+    r = clamp(r, 0.0f, 255.0f);
+    g = clamp(g, 0.0f, 255.0f);
+    b = clamp(b, 0.0f, 255.0f);
+    return (int(b) << 16) | (int(g) << 8) | int(r);
 }
 
+__global__ void cudaProcess(unsigned int* g_odata, int imgh) {
+    extern __shared__ uchar4 sdata[];
 
-
-
-
-
-
-
-
-
-
-//__global__ void update_frame(cudaSurfaceObject_t surface, int max_x, int max_y, int ns, curandState* rand_state, float t) {
-
-//}
-
-void renderScene() {
-    glClear(GL_COLOR_BUFFER_BIT);
-    glutSwapBuffers();
+    int tx = threadIdx.x;
+    int ty = threadIdx.y;
+    int bw = blockDim.x;
+    int bh = blockDim.y;
+    int x = blockIdx.x * bw + tx;
+    int y = blockIdx.y * bh + ty;
+    g_odata[x  + y * imgh] = rgbToInt((float)x / 800 * 255, (float)y / 800 * 255, 0);
 }
 
-void initGL() {
+extern "C" void generatePixel(dim3 grid, dim3 block, int sbytes,
+    unsigned int* g_odata, int imgh) {
+    hittable_list world;
+    lambertian* ground_material = new lambertian(vec3(0.5, 0.5, 0.5));
 
-    glutInitDisplayMode(GLUT_RGBA | GLUT_ALPHA | GLUT_DOUBLE);
-    glutInitWindowSize(windowWidth, windowHeight);
-    glutCreateWindow("CType Ray Tracing");
-    glDisable(GL_DEPTH_TEST);
-
-    glViewport(0, 0, windowWidth, windowHeight);
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glOrtho(0.0, windowWidth, windowHeight, 0, 0, 1);
-    glMatrixMode(GL_MODELVIEW);
-    glClearColor(0.5, 0.5, 0.5, 1.0);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    glutDisplayFunc(renderScene);
-    glutMainLoop();
-}
-
-int main(int argc, char** argv)
-{
-    glutInit(&argc, argv);
-    initGL();
-    return 0;
+    camera cam;
+    cudaProcess << <grid, block, sbytes >> > (g_odata, imgh);
 }
