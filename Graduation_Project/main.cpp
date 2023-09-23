@@ -5,7 +5,7 @@
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
 #include <helper_cuda.h>
-int windowWidth = 800, windowHeight = 800;
+int windowWidth = 1600, windowHeight = 900;
 unsigned int image_width = windowWidth;
 unsigned int image_height = windowHeight;
 int pixels = windowWidth * windowHeight;
@@ -27,7 +27,7 @@ static const char* glsl_draw_fragmentShader =
 "  FragColor = uvec4(gl_Color.xyz * 255.0, 255.0);\n"
 "}\n";
 extern "C" void generatePixel(dim3 grid, dim3 block, int sbytes,
-    unsigned int* g_odata, int imgw);
+    unsigned int* g_odata, int imgh,int imgw);
 extern "C" void initTracing();
 extern "C" void initCuda(dim3 grid, dim3 block,int image_height, int image_width,int pixels);
 void createPBO(GLuint* pbo, struct cudaGraphicsResource** pbo_resource) {
@@ -64,7 +64,7 @@ void generateImage() {
 
     printf("%d %d\n", image_width / block.x, image_height / block.y);
     //쿠다함수 추가 필요
-    generatePixel(grid, block, 0, out_data, image_height);
+    generatePixel(grid, block, 0, out_data, image_height,image_width);
 
     cudaGraphicsUnmapResources(1, &cuda_pbo_dest_resource, 0);
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER_ARB, pbo_dest);

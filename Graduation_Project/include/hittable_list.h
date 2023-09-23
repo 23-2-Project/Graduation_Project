@@ -35,11 +35,13 @@ class hittable_list : public hittable {
         auto closest_so_far = ray_t.maxv;
         //for (const auto& object : objects) {
         for (int i = 0; i < current_count; i++) {
-            if (objects[i]->hit(r, interval(ray_t.minv, closest_so_far), temp_rec)) {
+            printf("%d\n", current_count);
+            //이부분이 문제
+            /*if (objects[i]->hit(r, interval(ray_t.minv, closest_so_far), temp_rec)) {
                 hit_anything = true;
                 closest_so_far = temp_rec.t;
                 rec = temp_rec;
-            }
+            }*/
         }
 
         return hit_anything;
