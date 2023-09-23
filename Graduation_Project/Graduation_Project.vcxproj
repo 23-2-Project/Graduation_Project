@@ -86,7 +86,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\camera.h" />
-    <ClInclude Include="include\color.h" />
     <ClInclude Include="include\hittable.h" />
     <ClInclude Include="include\hittable_list.h" />
     <ClInclude Include="include\interval.h" />

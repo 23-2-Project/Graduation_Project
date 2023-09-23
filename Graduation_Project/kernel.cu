@@ -28,17 +28,20 @@
  // Utilities and system includes
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
+#include "cuda_runtime_api.h"
+#include <curand_kernel.h>
 #include <math_functions.h>
 #include <hittable_list.h>
 #include <ray.h>
-#include <color.h>
 #include <sphere.h>
 #include <hittable_list.h>
 #include <material.h>
 #include <vec3.h>
 #include <camera.h>
-hittable_list world;
-camera cam;
+hittable_list** world;
+hittable** objects;
+camera** cam;
+curandState* random_state;
 // convert floating point rgb color to 8-bit integer
 __device__ float clamp(float x, float a, float b) { return max(a, min(b, x)); }
 __device__ int rgbToInt(float r, float g, float b) {
@@ -47,7 +50,7 @@ __device__ int rgbToInt(float r, float g, float b) {
     b = clamp(b, 0.0f, 255.0f);
     return (int(b) << 16) | (int(g) << 8) | int(r);
 }
-__global__ void CalculatePerPixel(unsigned int* g_odata, int imgh) {
+__global__ void CalculatePerPixel(hittable_list** world,camera** camera,curandState* global_rand_state,int spp,unsigned int* g_odata, int imgh) {
     extern __shared__ uchar4 sdata[];
 
     int tx = threadIdx.x;
@@ -56,77 +59,67 @@ __global__ void CalculatePerPixel(unsigned int* g_odata, int imgh) {
     int bh = blockDim.y;
     int x = blockIdx.x * bw + tx;
     int y = blockIdx.y * bh + ty;
+    int index = x + y * imgh;
     //ray r = cam.get_ray(x, y);
-    
-    
-    
-    g_odata[x  + y * imgh] = rgbToInt((float)x / 800 * 255, (float)y / 800 * 255, 0);
-}
-extern "C" void initWorld() {
-    cam.aspect_ratio = 16.0 / 9.0;
-    cam.image_width = 400;
-    cam.samples_per_pixel = 10;
-    cam.max_depth = 50;
-    cam.vfov = 90;
-    cam.lookfrom = vec3(0, 0, 0);
-    cam.lookat = vec3(0, 0, -1);
-    cam.vup = vec3(0, 1, 0);
-    cam.initialize();
-
-
-
-
-    auto ground_material = new lambertian(vec3(0.5, 0.5, 0.5));
-    auto ground = new sphere(vec3(0, -1000, 0), 1000, ground_material);
-    world.add(ground);
-
-    for (int a = -11; a < 11; a++) {
-        for (int b = -11; b < 11; b++) {
-            auto choose_mat = random_double();
-            vec3 center(a + 0.9 * random_double(), 0.2, b + 0.9 * random_double());
-
-            if ((center - vec3(4, 0.2, 0)).length() > 0.9) {
-                material* sphere_material;
-
-                if (choose_mat < 0.8) {
-                    // diffuse
-                    auto albedo = vec3::random() * vec3::random();
-                    sphere_material = new lambertian(albedo);
-                    auto center2 = center + vec3(0, random_double(0, .5), 0);
-                    auto sp = new sphere(center, center2, 0.2, sphere_material);
-                    world.add(sp);
-                }
-                else if (choose_mat < 0.95) {
-                    // metal
-                    auto albedo = vec3::random(0.5, 1);
-                    auto fuzz = random_double(0, 0.5);
-                    sphere_material = new metal(albedo, fuzz);
-                    auto sp = new sphere(center, 0.2, sphere_material);
-                    world.add(sp);
-                }
-                else {
-                    // glass
-                    sphere_material = new dielectric(1.5);
-                    auto sp = new sphere(center, 0.2, sphere_material);
-                    world.add(sp);
-                }
-            }
-        }
+    curandState local_rand_state = global_rand_state[index];
+    vec3 color(0, 0, 0);
+    for (int i = 0; i < spp; i++) {
+        ray r = (*camera)->get_ray(x + curand_uniform(&local_rand_state), y + curand_uniform(&local_rand_state),&local_rand_state);
+        color += (*camera)->ray_color(r, (*camera)->max_depth, world,&local_rand_state);
     }
+    color /= float(spp);
+    printf("%f %f %f\n", color.x(), color.y(), color.z());
+    //g_odata[index] = rgbToInt(color.x(), color.y(), color.z());
+    g_odata[index] = rgbToInt((float)x / 800 * 255, (float)y / 800 * 255, 0);
 
-    auto material1 = new dielectric(1.5);
-    auto sp1 = new sphere(vec3(0, 1, 0), 1.0, material1);
-    world.add(sp1);
-
-    auto material2 = new lambertian(vec3(0.4, 0.2, 0.1));
-    auto sp2 = new sphere(vec3(-4, 1, 0), 1.0, material2);
-    world.add(sp2);
-
-    auto material3 = new metal(vec3(0.7, 0.6, 0.5), 0.0);
-    auto sp3 = new sphere(vec3(4, 1, 0), 1.0, material3);
-    world.add(sp3);
+    global_rand_state[index] = local_rand_state;
 }
+__global__ void initCamera(camera** ca,float ar,int iw,int spp,int md,int vfov, vec3 lf, vec3 la,vec3 vu) {
+
+    *ca = new camera(ar,iw,spp,md,vfov,lf,la,vu);
+
+}
+
+__global__ void initWorld(hittable_list** world,hittable** objects) {
+    lambertian* material_ground = new lambertian(vec3(0.8, 0.8, 0.0));
+    lambertian* material_center = new lambertian(vec3(0.7, 0.3, 0.3));
+
+    sphere* ground = new sphere(vec3(0.0, -100.5, -1.0), 100.0, material_ground);
+    sphere* center = new sphere(vec3(0.0, 0.0, -1.0), 0.5, material_center);
+
+
+    (*world)->object_counts = 10;//오브젝트 개수 정의 아래 cudamalloc과 맞춰줄 필요 있음
+    (*world) = new hittable_list(objects);
+    (*world)->add(ground);
+    (*world)->add(center);
+}
+extern "C" void initTracing() {
+
+    cudaMalloc(&cam, sizeof(camera*));
+    initCamera << <1, 1 >> > (cam, 16.0 / 9.0, 400, 10, 50, 90, vec3(0, 0, 0), vec3(0, 0, -1), vec3(0, 1, 0));
+    cudaMalloc(&objects, 10*sizeof(hittable*));//오브젝트 개수만큼 할당 필요
+    cudaMalloc(&world, sizeof(hittable_list*));
+    initWorld << <1, 1 >> > (world,objects);
+}
+
+__global__ void Random_Init(curandState* global_state,int ih) {
+    int tx = threadIdx.x;
+    int ty = threadIdx.y;
+    int bw = blockDim.x;
+    int bh = blockDim.y;
+    int x = blockIdx.x * bw + tx;
+    int y = blockIdx.y * bh + ty;
+    unsigned int pixel_index = x+y*ih;
+    curandState s;
+    curand_init(pixel_index, 0, 0, &global_state[pixel_index]);
+}
+extern "C" void initCuda(dim3 grid,dim3 block,int image_height,int image_width,int pixels) {
+    cudaMalloc(&random_state, pixels * sizeof(curandState));
+    Random_Init << <grid,block,0 >> > (random_state,image_height);
+}
+
+
 extern "C" void generatePixel(dim3 grid, dim3 block, int sbytes,
     unsigned int* g_odata, int imgh) {
-    CalculatePerPixel << <grid, block, sbytes >> > (g_odata, imgh);
+    CalculatePerPixel << <grid, block, sbytes >> > (world,cam,random_state,10,g_odata, imgh);
 }

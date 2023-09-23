@@ -5,19 +5,19 @@ class interval {
   public:
     double minv, maxv;
 
-    interval() : minv(+infinity), maxv(-infinity) {} // Default interval is empty
+    __device__ interval() : minv(+infinity), maxv(-infinity) {} // Default interval is empty
 
-    interval(double _min, double _max) : minv(_min), maxv(_max) {}
+    __device__ interval(double _min, double _max) : minv(_min), maxv(_max) {}
 
-    bool contains(double x) const {
+    __device__ bool contains(double x) const {
         return minv <= x && x <= maxv;
     }
 
-    bool surrounds(double x) const {
+    __device__ bool surrounds(double x) const {
         return minv < x && x < maxv;
     }
 
-    double clamp(double x) const {
+    __device__ double clamp(double x) const {
         if (x < minv) return minv;
         if (x > maxv) return maxv;
         return x;

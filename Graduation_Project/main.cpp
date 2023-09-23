@@ -6,6 +6,12 @@
 #include <cuda_gl_interop.h>
 #include <helper_cuda.h>
 int windowWidth = 800, windowHeight = 800;
+unsigned int image_width = windowWidth;
+unsigned int image_height = windowHeight;
+int pixels = windowWidth * windowHeight;
+dim3 block(16, 16, 1);
+dim3 grid(image_width / block.x, image_height / block.y, 1);
+
 GLuint pbo_dest;
 GLuint texture;
 GLuint shader;
@@ -13,8 +19,6 @@ struct cudaGraphicsResource* cuda_pbo_dest_resource;
 unsigned int size_tex_data;
 unsigned int num_texels;
 unsigned int num_values;
-unsigned int image_width = windowWidth;
-unsigned int image_height = windowHeight;
 static const char* glsl_draw_fragmentShader =
 "#version 130\n"
 "out uvec4 FragColor;\n"
@@ -24,7 +28,8 @@ static const char* glsl_draw_fragmentShader =
 "}\n";
 extern "C" void generatePixel(dim3 grid, dim3 block, int sbytes,
     unsigned int* g_odata, int imgw);
-extern "C" void initWorld();
+extern "C" void initTracing();
+extern "C" void initCuda(dim3 grid, dim3 block,int image_height, int image_width,int pixels);
 void createPBO(GLuint* pbo, struct cudaGraphicsResource** pbo_resource) {
     // set up vertex data parameter
     num_texels = image_width * image_height;
@@ -57,9 +62,6 @@ void generateImage() {
     size_t num_bytes;
     cudaGraphicsResourceGetMappedPointer((void**)&out_data, &num_bytes, cuda_pbo_dest_resource);
 
-    dim3 block(16, 16, 1);
-    // dim3 block(16, 16, 1);
-    dim3 grid(image_width / block.x, image_height / block.y, 1);
     printf("%d %d\n", image_width / block.x, image_height / block.y);
     //쿠다함수 추가 필요
     generatePixel(grid, block, 0, out_data, image_height);
@@ -240,14 +242,15 @@ void initGL(int *argc, char **argv) {
 
 int main(int argc,char **argv) {
     initGL(&argc, argv);
-    initWorld();
+    initTracing();
+    initCuda(grid,block,image_height,image_width,pixels);
     findCudaDevice(argc, (const char **)argv);
 
-
+    std::cout << "GLContext" << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
+    cudaDeviceSynchronize();
     glutDisplayFunc(renderScene);
     initGLBuffer();
     glutMainLoop();
-
     FreeResource();
 
 
