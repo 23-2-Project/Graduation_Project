@@ -15,12 +15,20 @@ hittable** objects;
 camera** cam;
 curandState* random_state;
 // convert floating point rgb color to 8-bit integer
-__device__ float clamp(float x, float a, float b) { return max(a, min(b, x)); }
-__device__ int rgbToInt(float r, float g, float b) {
+__device__ float clamp(double x, double a, double b) { return max(a, min(b, x)); }
+__device__ int rgbToInt(double r, double g, double b) {
 	r = clamp(r, 0.0f, 255.0f);
 	g = clamp(g, 0.0f, 255.0f);
 	b = clamp(b, 0.0f, 255.0f);
 	return (int(b) << 16) | (int(g) << 8) | int(r);
+}
+__device__ int vectorgb(vec3 color) {
+	return (int(clamp(color.z()*255,0.0f,255.0f))<<16)|(int(clamp(color.y()*255,0.0f,255.0f))<<8)|int(clamp(color.x() * 255, 0.0f, 255.0f));
+}
+__device__ vec3 ray_color(const ray& r) {
+	vec3 unit_direction = unit_vector(r.direction());
+	auto a = 0.5 * (unit_direction.y() + 1.0);
+	return (1.0 - a) * vec3(1.0, 1.0, 1.0) + a * vec3(0.5, 0.7, 1.0);
 }
 __global__ void CalculatePerPixel(hittable_list** world, camera** camera, curandState* global_rand_state, int spp, unsigned int* g_odata, int imgh, int imgw) {
 
@@ -28,29 +36,60 @@ __global__ void CalculatePerPixel(hittable_list** world, camera** camera, curand
 	int ty = threadIdx.y;
 	int bw = blockDim.x;
 	int bh = blockDim.y;
-	int x = blockIdx.x * bw + tx;
-	int y = blockIdx.y * bh + ty;
-	int index = x + y * imgh;
-	//ray r = cam.get_ray(x, y);
+	int i = blockIdx.x * bw + tx;
+	int j = blockIdx.y * bh + ty;
+	int index = i + j * imgh;
+
+
+
+
+
+
+
+	auto aspect_ratio = 16.0 / 9.0;
+	int image_width = 1600;
+
+	// Calculate the image height, and ensure that it's at least 1.
+	int image_height = static_cast<int>(image_width / aspect_ratio);
+	image_height = (image_height < 1) ? 1 : image_height;
+
+	// Camera
+
+	auto focal_length = 1.0;
+	auto viewport_height = 2.0;
+	auto viewport_width = viewport_height * (static_cast<double>(image_width) / image_height);
+	auto camera_center = vec3(0, 0, 0);
+
+	// Calculate the vectors across the horizontal and down the vertical viewport edges.
+	auto viewport_u = vec3(viewport_width, 0, 0);
+	auto viewport_v = vec3(0, -viewport_height, 0);
+
+	// Calculate the horizontal and vertical delta vectors from pixel to pixel.
+	auto pixel_delta_u = viewport_u / image_width;
+	auto pixel_delta_v = viewport_v / image_height;
+
+	// Calculate the location of the upper left pixel.
+	auto viewport_upper_left = camera_center
+		- vec3(0, 0, focal_length) - viewport_u / 2 - viewport_v / 2;
+	auto pixel00_loc = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
+	auto pixel_center = pixel00_loc + (i * pixel_delta_u) + (j * pixel_delta_v);
+	auto ray_direction = pixel_center - camera_center;
+
+	ray r(camera_center, ray_direction);
+	vec3 pc = ray_color(r);
+
+
+	//printf("%f %f %f\n", pc.x(), pc.y(), pc.z());
 	curandState local_rand_state = global_rand_state[index];
 	vec3 color(0, 0, 0);
-	for (int i = 0; i < spp; i++) {
-		ray r = (*camera)->get_ray(x + curand_uniform(&local_rand_state), y + curand_uniform(&local_rand_state), &local_rand_state);
-		//color += (*camera)->ray_color(r, (*camera)->max_depth, world, &local_rand_state);//이부분 문제
-		vec3 test= (*camera)->ray_color(r, (*camera)->max_depth, world, &local_rand_state);
-		//printf("%f %f %f\n", test.x(), test.y(), test.z());
-	}
 	color /= float(spp);
-	//printf("%f %f %f\n", color.x(), color.y(), color.z());
-	//g_odata[index] = rgbToInt(color.x(), color.y(), color.z());
 	//g_odata[index] = rgbToInt((float)x / 800 * 255, (float)y / 800 * 255, 0);
-
 	global_rand_state[index] = local_rand_state;
-	g_odata[x + y * imgw] = rgbToInt((float)x / 1600 * 255, (float)y / 900 * 255, 0);
+	g_odata[i + j * imgw] = vectorgb(pc);
 }
-__global__ void initCamera(camera** ca, float ar, int iw, int spp, int md, int vfov, vec3 lf, vec3 la, vec3 vu) {
+__global__ void initCamera(camera** ca) {
 
-	*ca = new camera(ar, iw, spp, md, vfov, lf, la, vu);
+	*ca = new camera(16.0 / 9.0, 1600, 10, 50, 90, vec3(0, 0, 0), vec3(0, 0, -1), vec3(0, 1, 0));
 
 }
 
@@ -71,7 +110,8 @@ __global__ void initWorld(hittable_list** world, hittable** objects) {
 extern "C" void initTracing() {
 
 	cudaMalloc(&cam, sizeof(camera*));
-	initCamera << <1, 1 >> > (cam, 16.0 / 9.0, 400, 10, 50, 90, vec3(0, 0, 0), vec3(0, 0, -1), vec3(0, 1, 0));
+	initCamera << <1, 1 >> > (cam);
+	//*ca = new camera(ar, iw, spp, md, vfov, lf, la, vu);
 	cudaMalloc(&objects, 1 * sizeof(hittable*));//오브젝트 개수만큼 할당 필요
 	cudaMalloc(&world, sizeof(hittable_list*));
 	initWorld << <1, 1 >> > (world, objects);

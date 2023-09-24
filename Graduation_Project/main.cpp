@@ -62,7 +62,6 @@ void generateImage() {
     size_t num_bytes;
     cudaGraphicsResourceGetMappedPointer((void**)&out_data, &num_bytes, cuda_pbo_dest_resource);
 
-    printf("%d %d\n", image_width / block.x, image_height / block.y);
     //쿠다함수 추가 필요
     generatePixel(grid, block, 0, out_data, image_height,image_width);
 

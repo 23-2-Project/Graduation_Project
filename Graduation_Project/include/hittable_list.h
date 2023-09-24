@@ -3,12 +3,6 @@
 
 #include "hittable.h"
 
-#include <memory>
-#include <vector>
-
-using std::shared_ptr;
-using std::make_shared;
-
 class hittable_list : public hittable {
   public:
     hittable** objects;
@@ -39,11 +33,11 @@ class hittable_list : public hittable {
             //objects[0]->hit(ray(), interval(), hit_record());
             //printf("%d\n", objects[0]);
             //objects[i]->id;
-           /* if (objects[i]->hit(r, interval(ray_t.minv, closest_so_far), temp_rec)) {
+            if (objects[i]->hit(r, interval(ray_t.minv, closest_so_far), temp_rec)) {
                 hit_anything = true;
                 closest_so_far = temp_rec.t;
                 rec = temp_rec;
-            }*/
+            }
         }
 
         return hit_anything;
