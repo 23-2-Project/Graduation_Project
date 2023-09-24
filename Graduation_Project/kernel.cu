@@ -61,17 +61,18 @@ __global__ void initWorld(hittable_list** world, hittable** objects) {
 	sphere* ground = new sphere(vec3(0.0, -100.5, -1.0), 100.0, material_ground);
 	sphere* center = new sphere(vec3(0.0, 0.0, -1.0), 0.5, material_center);
 
-
-	(*world) = new hittable_list(objects);
-	(*world)->object_counts = 10;//오브젝트 개수 정의 아래 cudamalloc과 맞춰줄 필요 있음
+	//objects[0] = new sphere(vec3(0.0, -100.5, -1.0), 100.0, material_ground);
+	//objects[1] = new sphere(vec3(0.0, 0.0, -1.0), 0.5, material_center);
+	//ground->hit(ray(),interval(),hit_record());
+	(*world) = new hittable_list(objects,1);//오브젝트 개수 정의 아래 cudamalloc과 맞춰줄 필요 있음
 	(*world)->add(ground);
-	(*world)->add(center);
+	//(*world)->add(center);
 }
 extern "C" void initTracing() {
 
 	cudaMalloc(&cam, sizeof(camera*));
 	initCamera << <1, 1 >> > (cam, 16.0 / 9.0, 400, 10, 50, 90, vec3(0, 0, 0), vec3(0, 0, -1), vec3(0, 1, 0));
-	cudaMalloc(&objects, 10 * sizeof(hittable*));//오브젝트 개수만큼 할당 필요
+	cudaMalloc(&objects, 1 * sizeof(hittable*));//오브젝트 개수만큼 할당 필요
 	cudaMalloc(&world, sizeof(hittable_list*));
 	initWorld << <1, 1 >> > (world, objects);
 }

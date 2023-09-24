@@ -8,15 +8,19 @@ class sphere : public hittable {
   public:
     // Stationary Sphere
     __device__ sphere(vec3 _center, double _radius, material* _material)
-      : center1(_center), radius(_radius), mat(_material), is_moving(false) {}
+        : center1(_center), radius(_radius), mat(_material), is_moving(false) {
+        id = 1;
+    }
 
     // Moving Sphere
     __device__ sphere(vec3 _center1, vec3 _center2, double _radius, material* _material)
-      : center1(_center1), radius(_radius), mat(_material), is_moving(true)
+        : center1(_center1), radius(_radius), mat(_material), is_moving(true)
     {
+        id = 1;
         center_vec = _center2 - _center1;
     }
     __device__ bool hit(const ray& r, interval ray_t, hit_record& rec) const{
+        printf("히트 확인\n");
         //vec3 center = is_moving ? sphere_center(r.time()) : center1;
         //vec3 oc = r.origin() - center;
         //auto a = r.direction().length_squared();

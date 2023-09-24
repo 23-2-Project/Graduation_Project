@@ -15,29 +15,31 @@ class hittable_list : public hittable {
 
     __device__ hittable_list() {}
 
-    __device__ hittable_list(hittable* object) { add(object); }
-    __device__ hittable_list(hittable** list) { objects=list; }
-    __device__ hittable_list(int count) { 
-        object_counts=count; 
-        //(*objects) = new hittable*
-    }
+    __device__ hittable_list(hittable** list, int n) { objects = list; object_counts= n; }
 
     __device__ void clear() { delete* objects; }
 
     __device__ void add(hittable* object) {
-        objects[current_count++] = object;
+        printf("받고나서 %d\n", object->id);
+        object->hit(ray(), interval(), hit_record());
+        objects[0] = object;
+        current_count += 1;
+        printf("넣고나서 %d\n", objects[0]);
+        objects[0]->hit(ray(), interval(), hit_record());
         //objects.push_back(object);
     }
 
-    __device__ bool hit(const ray& r, interval ray_t, hit_record& rec) const override {
+    __device__ bool hit(const ray& r, interval ray_t, hit_record& rec) const {
         hit_record temp_rec;
         bool hit_anything = false;
         auto closest_so_far = ray_t.maxv;
         //for (const auto& object : objects) {
         for (int i = 0; i < current_count; i++) {
-            printf("%d\n", current_count);
             //이부분이 문제
-            /*if (objects[i]->hit(r, interval(ray_t.minv, closest_so_far), temp_rec)) {
+            //objects[0]->hit(ray(), interval(), hit_record());
+            //printf("%d\n", objects[0]);
+            //objects[i]->id;
+           /* if (objects[i]->hit(r, interval(ray_t.minv, closest_so_far), temp_rec)) {
                 hit_anything = true;
                 closest_so_far = temp_rec.t;
                 rec = temp_rec;
