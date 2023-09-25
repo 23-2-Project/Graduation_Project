@@ -9,6 +9,8 @@ class camera {
   public:
 
       int    max_depth = 10;
+      vec3 lookat = vec3(0, 0, 0);
+      vec3 lookfrom = vec3(0, 0, -1);
     __device__ camera(float ar,int iw,int spp,int md,int vf,vec3 lf,vec3 la,vec3 vu) {
         aspect_ratio = ar;
         image_width = iw;
@@ -47,8 +49,8 @@ class camera {
         // Calculate the location of the upper left pixel.
         auto viewport_upper_left = center - (focal_length * w) - viewport_u / 2 - viewport_v / 2;
         pixel00_loc = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
-        movdir[0] = w;//전
-        movdir[1] = -w;//후
+        movdir[0] = -w;//전
+        movdir[1] = w;//후
         movdir[2] = u;//우
         movdir[3] = -u;//좌
 
@@ -65,9 +67,7 @@ class camera {
         return ray(center, pixel_center- center);//렌즈 처리하려면 center 바꿔야함
     }
     __device__ void moveorigin(int direction) {
-        printf("카메라 위치 %f %f %f\n", lookfrom.x(), lookfrom.y(), lookfrom.z());
         lookfrom += movdir[direction];
-        printf("  이후 카메라 위치 %f %f %f\n", lookfrom.x(), lookfrom.y(), lookfrom.z());
         lookat += movdir[direction];
         initialize();
     }
@@ -101,8 +101,8 @@ class camera {
         // Calculate the location of the upper left pixel.
         auto viewport_upper_left = center - (focal_length * w) - viewport_u / 2 - viewport_v / 2;
         pixel00_loc = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
-        movdir[0] = w;//전
-        movdir[1] = -w;//후
+        movdir[0] = -w;//전
+        movdir[1] = w;//후
         movdir[2] = u;//우
         movdir[3] = -u;//좌
     }
@@ -113,8 +113,6 @@ private:
     int    samples_per_pixel = 10;   
 
     double vfov = 90;              
-    vec3 lookfrom = vec3(0, 0, -1);
-    vec3 lookat = vec3(0, 0, 0);
     vec3   vup = vec3(0, 1, 0);     
 
     int    image_height;  

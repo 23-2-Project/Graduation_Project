@@ -8,6 +8,8 @@
 int windowWidth = 1600, windowHeight = 900;
 unsigned int image_width = windowWidth;
 unsigned int image_height = windowHeight;
+int mouse_prev_x = 0, mouse_prev_y = 0;
+int mouse_dx = 0, mouse_dy = 0;
 int pixels = windowWidth * windowHeight;
 dim3 block(16, 16, 1);
 dim3 grid(image_width / block.x, image_height / block.y, 1);
@@ -31,6 +33,7 @@ extern "C" void generatePixel(dim3 grid, dim3 block, int sbytes,
 extern "C" void initTracing();
 extern "C" void initCuda(dim3 grid, dim3 block,int image_height, int image_width,int pixels);
 extern "C" void moveCamera(int direction);
+extern "C" void RotateCamera(int x, int y);
 void createPBO(GLuint* pbo, struct cudaGraphicsResource** pbo_resource) {
     // set up vertex data parameter
     num_texels = image_width * image_height;
@@ -260,8 +263,11 @@ void doTimer(int i) {
     glutTimerFunc(10, doTimer, 1);
 }
 void myMouseMove(int x, int y) {
-    printf("%d %d\n",x,y);
-    x = (x-image_width / 2)/image_width;
+    mouse_dx = x - mouse_prev_x;
+    mouse_dy = y - mouse_prev_y;
+    RotateCamera(mouse_dx, -mouse_dy);
+    mouse_prev_x = x;
+    mouse_prev_y = y;
 }
 int main(int argc,char **argv) {
     initGL(&argc, argv);

@@ -14,6 +14,7 @@ hittable** world;
 hittable** objects;
 camera** cam;
 int object_counts = 2;
+
 curandState* random_state;
 // convert floating point rgb color to 8-bit integer
 __device__ float clamp(double x, double a, double b) { return max(a, min(b, x)); }
@@ -108,8 +109,18 @@ __global__ void initCamera(camera** ca) {
 __global__ void movCam(camera** ca, int direction) {
 	(*ca)->moveorigin(direction);
 }
-__global__ void RotateCam(camera** ca, int direction) {
-	(*ca)->moveorigin(direction);
+__global__ void RotateCam(camera** ca, vec3 direction) {
+
+	auto beta = direction.y() / 50;
+
+
+	
+	auto alpha = direction.x() * 90 / 800;
+	(*ca)->lookat = vec3(cos(degrees_to_radians(beta)) * sin(degrees_to_radians(alpha)), sin(degrees_to_radians(beta)), cos(degrees_to_radians(beta)) * cos(degrees_to_radians(alpha)));
+	printf("현재 바라보는 방향 %f %f %f\n", (*ca)->lookat.x(), (*ca)->lookat.y(), -(*ca)->lookat.z());
+	printf("  현재 바라보는 위치 %f %f %f\n", (*ca)->lookfrom.x(), (*ca)->lookfrom.y(), -(*ca)->lookfrom.z());
+	(*ca)->initialize();
+	//(*ca)-origin(direction);
 }
 __global__ void initWorld(hittable** world, hittable** objects,int object_counts) {
 
@@ -132,7 +143,7 @@ extern "C" void moveCamera(int direction) {
 	movCam << <1, 1 >> > (cam, direction);
 }
 extern "C" void RotateCamera(int x,int y) {
-	movCam << <1, 1 >> > (cam, direction);
+	RotateCam << <1, 1 >> > (cam,vec3(x,y,0));
 }
 __global__ void Random_Init(curandState* global_state, int ih) {
 	int tx = threadIdx.x;
