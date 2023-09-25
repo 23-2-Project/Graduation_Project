@@ -10,9 +10,10 @@
 #include <material.h>
 #include <vec3.h>
 #include <camera.h>
-hittable_list** world;
+hittable** world;
 hittable** objects;
 camera** cam;
+int object_counts = 2;
 curandState* random_state;
 // convert floating point rgb color to 8-bit integer
 __device__ float clamp(double x, double a, double b) { return max(a, min(b, x)); }
@@ -23,14 +24,44 @@ __device__ int rgbToInt(double r, double g, double b) {
 	return (int(b) << 16) | (int(g) << 8) | int(r);
 }
 __device__ int vectorgb(vec3 color) {
-	return (int(clamp(color.z()*255,0.0f,255.0f))<<16)|(int(clamp(color.y()*255,0.0f,255.0f))<<8)|int(clamp(color.x() * 255, 0.0f, 255.0f));
+	return rgbToInt(color.x()*255,color.y()*255,color.z()*255);
 }
-__device__ vec3 ray_color(const ray& r) {
-	vec3 unit_direction = unit_vector(r.direction());
-	auto a = 0.5 * (unit_direction.y() + 1.0);
-	return (1.0 - a) * vec3(1.0, 1.0, 1.0) + a * vec3(0.5, 0.7, 1.0);
+
+//__device__ vec3 ray_color(const ray& r) {
+//	vec3 unit_direction = unit_vector(r.direction());
+//	float t = 0.5f * (unit_direction.y() + 1.0f);
+//	vec3 c = (1.0f - t) * vec3(1.0, 1.0, 1.0) + t * vec3(0.5, 0.7, 1.0);
+//	return  c;
+//}
+
+__device__ vec3 ray_color(curandState *state,const ray& r,int depth,const hittable** world) {
+	ray cur_ray = r;
+	vec3 cur_attenuation = vec3(1.0, 1.0, 1.0);
+	for (int i = 0; i < depth; i++) {
+		hit_record rec;
+		//if(false){
+		if ((*world)->hit(cur_ray, 0.001f, FLT_MAX, rec)) {
+			ray scattered;
+			vec3 attenuation;
+			if (rec.mat->scatter(cur_ray, rec, attenuation, scattered,state)) {
+				cur_ray = scattered;
+				cur_attenuation *= attenuation;
+			}
+			else {
+				return vec3(0.0, 0.0, 0.0);
+			}
+		}
+		else {
+			vec3 unit_direction = unit_vector(cur_ray.direction());
+			float t = 0.5f * (unit_direction.y() + 1.0f);
+			vec3 c = (1.0f - t) * vec3(1.0, 1.0, 1.0) + t * vec3(0.5, 0.7, 1.0);
+			return cur_attenuation * c;
+		}
+
+	}
+	return vec3(0.0, 0.0, 0.0);
 }
-__global__ void CalculatePerPixel(hittable_list** world, camera** camera, curandState* global_rand_state, int spp, unsigned int* g_odata, int imgh, int imgw) {
+__global__ void CalculatePerPixel(hittable** world, camera** camera, curandState* global_rand_state, int spp, unsigned int* g_odata, int imgh, int imgw) {
 
 	int tx = threadIdx.x;
 	int ty = threadIdx.y;
@@ -46,42 +77,17 @@ __global__ void CalculatePerPixel(hittable_list** world, camera** camera, curand
 
 
 
-	auto aspect_ratio = 16.0 / 9.0;
-	int image_width = 1600;
-
-	// Calculate the image height, and ensure that it's at least 1.
-	int image_height = static_cast<int>(image_width / aspect_ratio);
-	image_height = (image_height < 1) ? 1 : image_height;
-
-	// Camera
-
-	auto focal_length = 1.0;
-	auto viewport_height = 2.0;
-	auto viewport_width = viewport_height * (static_cast<double>(image_width) / image_height);
-	auto camera_center = vec3(0, 0, 0);
-
-	// Calculate the vectors across the horizontal and down the vertical viewport edges.
-	auto viewport_u = vec3(viewport_width, 0, 0);
-	auto viewport_v = vec3(0, -viewport_height, 0);
-
-	// Calculate the horizontal and vertical delta vectors from pixel to pixel.
-	auto pixel_delta_u = viewport_u / image_width;
-	auto pixel_delta_v = viewport_v / image_height;
-
-	// Calculate the location of the upper left pixel.
-	auto viewport_upper_left = camera_center
-		- vec3(0, 0, focal_length) - viewport_u / 2 - viewport_v / 2;
-	auto pixel00_loc = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
-	auto pixel_center = pixel00_loc + (i * pixel_delta_u) + (j * pixel_delta_v);
-	auto ray_direction = pixel_center - camera_center;
-
-	ray r(camera_center, ray_direction);
-	vec3 pc = ray_color(r);
-
+	//ray r(camera_center, ray_direction);
+	//vec3 pc = ray_color(r);
 
 	//printf("%f %f %f\n", pc.x(), pc.y(), pc.z());
 	curandState local_rand_state = global_rand_state[index];
 	vec3 color(0, 0, 0);
+
+	int depth = (*camera)->max_depth;
+	ray r = (*camera)->get_ray(&local_rand_state, i, j);
+	vec3 pc = ray_color(&local_rand_state, r, depth, world);
+	//vec3 pc = ray_color(r);
 	color /= float(spp);
 	//g_odata[index] = rgbToInt((float)x / 800 * 255, (float)y / 800 * 255, 0);
 	global_rand_state[index] = local_rand_state;
@@ -89,34 +95,45 @@ __global__ void CalculatePerPixel(hittable_list** world, camera** camera, curand
 }
 __global__ void initCamera(camera** ca) {
 
-	*ca = new camera(16.0 / 9.0, 1600, 10, 50, 90, vec3(0, 0, 0), vec3(0, 0, -1), vec3(0, 1, 0));
+	*ca = new camera(16.0 / 9.0, //종횡비
+		1600, //이미지 가로길이
+		10,  //픽셀당 샘플수
+		50,  //반사 횟수
+		90,  //시야각
+		vec3(0, 0, 0), //카메라 위치 
+		vec3(0, 0, -1), //바라보는곳
+		vec3(0, 1, 0)); //업벡터
 
 }
+__global__ void movCam(camera** ca, int direction) {
+	(*ca)->moveorigin(direction);
+}
+__global__ void RotateCam(camera** ca, int direction) {
+	(*ca)->moveorigin(direction);
+}
+__global__ void initWorld(hittable** world, hittable** objects,int object_counts) {
 
-__global__ void initWorld(hittable_list** world, hittable** objects) {
-	lambertian* material_ground = new lambertian(vec3(0.8, 0.8, 0.0));
-	lambertian* material_center = new lambertian(vec3(0.7, 0.3, 0.3));
 
-	sphere* ground = new sphere(vec3(0.0, -100.5, -1.0), 100.0, material_ground);
-	sphere* center = new sphere(vec3(0.0, 0.0, -1.0), 0.5, material_center);
-
-	//objects[0] = new sphere(vec3(0.0, -100.5, -1.0), 100.0, material_ground);
-	//objects[1] = new sphere(vec3(0.0, 0.0, -1.0), 0.5, material_center);
-	//ground->hit(ray(),interval(),hit_record());
-	(*world) = new hittable_list(objects,1);//오브젝트 개수 정의 아래 cudamalloc과 맞춰줄 필요 있음
-	(*world)->add(ground);
-	//(*world)->add(center);
+	objects[0] = new sphere(vec3(0, -1000.0, 0), 1000, new lambertian(vec3(0.5, 0.5, 0.5)));
+	objects[1] = new sphere(vec3(0, 0, -1), 0.5, new lambertian(vec3(0.7, 0.8, 0.0)));
+	//objects[0] = ground;
+	*world = new hittable_list(objects, object_counts);
+	//(*world)->add(ground);
 }
 extern "C" void initTracing() {
 
 	cudaMalloc(&cam, sizeof(camera*));
 	initCamera << <1, 1 >> > (cam);
-	//*ca = new camera(ar, iw, spp, md, vfov, lf, la, vu);
-	cudaMalloc(&objects, 1 * sizeof(hittable*));//오브젝트 개수만큼 할당 필요
-	cudaMalloc(&world, sizeof(hittable_list*));
-	initWorld << <1, 1 >> > (world, objects);
+	cudaMalloc((void**) &objects, object_counts * sizeof(hittable*));//오브젝트 개수만큼 할당 필요
+	cudaMalloc((void**)&world, sizeof(hittable*));
+	initWorld << <1, 1 >> > (world, objects,object_counts);
 }
-
+extern "C" void moveCamera(int direction) {
+	movCam << <1, 1 >> > (cam, direction);
+}
+extern "C" void RotateCamera(int x,int y) {
+	movCam << <1, 1 >> > (cam, direction);
+}
 __global__ void Random_Init(curandState* global_state, int ih) {
 	int tx = threadIdx.x;
 	int ty = threadIdx.y;

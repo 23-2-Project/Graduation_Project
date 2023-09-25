@@ -30,6 +30,7 @@ extern "C" void generatePixel(dim3 grid, dim3 block, int sbytes,
     unsigned int* g_odata, int imgh,int imgw);
 extern "C" void initTracing();
 extern "C" void initCuda(dim3 grid, dim3 block,int image_height, int image_width,int pixels);
+extern "C" void moveCamera(int direction);
 void createPBO(GLuint* pbo, struct cudaGraphicsResource** pbo_resource) {
     // set up vertex data parameter
     num_texels = image_width * image_height;
@@ -96,13 +97,13 @@ void displayImage(GLuint texture) {
 
     glBegin(GL_QUADS);
     glTexCoord2f(0.0, 0.0);
-    glVertex3f(-1.0, 1.0, 0.5);//왼쪽 위
+    glVertex3f(-1.0, -1.0, 0.5);
     glTexCoord2f(1.0, 0.0);
-    glVertex3f(-1.0, -1.0, 0.5);//왼쪽 아래
+    glVertex3f(1.0, -1.0, 0.5);
     glTexCoord2f(1.0, 1.0);
-    glVertex3f(1.0, -1.0, 0.5);//오른쪽 아래
+    glVertex3f(1.0, 1.0, 0.5);
     glTexCoord2f(0.0, 1.0);
-    glVertex3f(1.0, 1.0, 0.5);//오른쪽 위
+    glVertex3f(-1.0, 1.0, 0.5);
     glEnd();
 
     glMatrixMode(GL_PROJECTION);
@@ -204,7 +205,23 @@ GLuint compileGLSLprogram(const char* vs, const char* fs) {
 
     return p;
 }
-
+void keyboard(unsigned char key, int /*x*/, int /*y*/) {
+    if (key == 'w') {
+        moveCamera(0);
+    }
+    else if (key == 'a') {
+        moveCamera(3);
+    }
+    else if (key == 's') {
+        moveCamera(1);
+    }
+    else if (key == 'd') {
+        moveCamera(2);
+    }
+    //default:
+        //printf("%c 눌림", key);
+    
+}
 void initGLBuffer() {
     createPBO(&pbo_dest, &cuda_pbo_dest_resource);
     createTexture(&texture, image_width, image_height);
@@ -238,7 +255,14 @@ void initGL(int *argc, char **argv) {
     glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, white);
     glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, 60.0f);
 }
-
+void doTimer(int i) {
+    glutPostRedisplay();
+    glutTimerFunc(10, doTimer, 1);
+}
+void myMouseMove(int x, int y) {
+    printf("%d %d\n",x,y);
+    x = (x-image_width / 2)/image_width;
+}
 int main(int argc,char **argv) {
     initGL(&argc, argv);
     initTracing();
@@ -248,6 +272,9 @@ int main(int argc,char **argv) {
     std::cout << "GLContext" << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
     cudaDeviceSynchronize();
     glutDisplayFunc(renderScene);
+    glutKeyboardFunc(keyboard);
+    glutPassiveMotionFunc(myMouseMove);
+    glutTimerFunc(10, doTimer, 1);
     initGLBuffer();
     glutMainLoop();
     FreeResource();
