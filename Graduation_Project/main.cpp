@@ -264,11 +264,14 @@ void doTimer(int i) {
     glutTimerFunc(10, doTimer, 1);
 }
 void myMouseMove(int x, int y) {
+    int i = mouse_dx;
     mouse_dx = x - mouse_prev_x;
     mouse_dy = y - mouse_prev_y;
-    RotateCamera(mouse_dx, -mouse_dy);
     mouse_prev_x = x;
     mouse_prev_y = y;
+    if (i != -1) {
+        RotateCamera(mouse_dx, -mouse_dy);
+    }
 }
 void myMouseWheel(int button, int dir, int x, int y) {
     if (button == 3) {//¾Æ·¡
@@ -276,6 +279,12 @@ void myMouseWheel(int button, int dir, int x, int y) {
     }
     else if (button == 4) {//À§
         manivfov(1);
+    }
+    else if (button == GLUT_LEFT_BUTTON) {
+        if (dir == GLUT_UP) {
+            mouse_dx = -1;
+            mouse_dy = -1;
+        }
     }
 }
 int main(int argc,char **argv) {
@@ -289,7 +298,7 @@ int main(int argc,char **argv) {
     glutDisplayFunc(renderScene);
     glutKeyboardFunc(keyboard);
     glutMouseFunc(myMouseWheel);
-    glutPassiveMotionFunc(myMouseMove);
+    glutMotionFunc(myMouseMove);
     glutTimerFunc(10, doTimer, 1);
     initGLBuffer();
     glutMainLoop();
