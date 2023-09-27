@@ -106,8 +106,8 @@ __global__ void initCamera(camera** ca) {
 		vec3(0, 1, 0)); //업벡터
 
 }
-__global__ void movCam(camera** ca, int direction) {
-	(*ca)->moveorigin(direction);
+__global__ void movCam(camera** ca, int direction,int weight) {
+	(*ca)->moveorigin(direction,weight);
 }
 __global__ void RotateCam(camera** ca, vec3 direction) {
 
@@ -135,8 +135,8 @@ extern "C" void initTracing() {
 	cudaMalloc((void**)&world, sizeof(hittable*));
 	initWorld << <1, 1 >> > (world, objects,object_counts);
 }
-extern "C" void moveCamera(int direction) {
-	movCam << <1, 1 >> > (cam, direction);
+extern "C" void moveCamera(int direction,int weight) {
+	movCam << <1, 1 >> > (cam, direction,weight);
 }
 extern "C" void RotateCamera(int x, int y) {
 	RotateCam << <1, 1 >> > (cam, vec3(x, y, 0));

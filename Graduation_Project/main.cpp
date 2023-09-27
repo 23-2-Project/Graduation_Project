@@ -1,15 +1,20 @@
 #include <stdio.h>
+#include <sstream>
 #include <windows.h>
 #include <helper_gl.h>
 #include <GL/freeglut.h>
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
 #include <helper_cuda.h>
+#include "timer.h"
 int windowWidth = 1600, windowHeight = 900;
 unsigned int image_width = windowWidth;
 unsigned int image_height = windowHeight;
 int mouse_prev_x = 0, mouse_prev_y = 0;
 int mouse_dx = 0, mouse_dy = 0;
+
+int keyboard_prev = 0;
+int keyboard_d = 0;
 int pixels = windowWidth * windowHeight;
 dim3 block(16, 16, 1);
 dim3 grid(image_width / block.x, image_height / block.y, 1);
@@ -32,7 +37,7 @@ extern "C" void generatePixel(dim3 grid, dim3 block, int sbytes,
     unsigned int* g_odata, int imgh,int imgw);
 extern "C" void initTracing();
 extern "C" void initCuda(dim3 grid, dim3 block,int image_height, int image_width,int pixels);
-extern "C" void moveCamera(int direction);
+extern "C" void moveCamera(int direction,int weight);
 extern "C" void RotateCamera(int x, int y);
 extern "C" void manivfov(int x);
 void createPBO(GLuint* pbo, struct cudaGraphicsResource** pbo_resource) {
@@ -117,11 +122,17 @@ void displayImage(GLuint texture) {
 }
 
 void renderScene() {
+    std::ostringstream Title;
+    Timer t;
     generateImage();
     displayImage(texture);
 
     cudaDeviceSynchronize();
     glutSwapBuffers();
+    Title << "CType Ray Tracing ";
+    Title << 1/t.now();
+    Title << "f";
+    glutSetWindowTitle(Title.str().c_str());
 }
 
 void createTexture(GLuint* texture, unsigned int size_x, unsigned int size_y) {
@@ -144,14 +155,14 @@ void FreeResource() {
 }
 GLuint compileGLSLprogram(const char* vs, const char* fs) {
     GLuint v, f, p = 0;
-
+    
     p = glCreateProgram();
 
     if (vs) {
         v = glCreateShader(GL_VERTEX_SHADER);
         glShaderSource(v, 1, &vs, NULL);
         glCompileShader(v);
-
+        
         // check if shader compiled
         GLint compiled = 0;
         glGetShaderiv(v, GL_COMPILE_STATUS, &compiled);
@@ -210,21 +221,30 @@ GLuint compileGLSLprogram(const char* vs, const char* fs) {
     return p;
 }
 void keyboard(unsigned char key, int /*x*/, int /*y*/) {
+    keyboard_d += 1;
     if (key == 'w') {
-        moveCamera(0);
+        moveCamera(0,keyboard_d);
     }
     else if (key == 'a') {
-        moveCamera(3);
+        moveCamera(3,keyboard_d);
     }
     else if (key == 's') {
-        moveCamera(1);
+        moveCamera(1, keyboard_d);
     }
     else if (key == 'd') {
-        moveCamera(2);
+        moveCamera(2, keyboard_d);
     }
     //default:
         //printf("%c 눌림", key);
-    
+
+}
+void keyboardup(unsigned char key, int /*x*/, int /*y*/) {
+    if (key == 'w' || key == 'a' || key == 's' || key == 'd') {
+        keyboard_d = 0;
+    }
+    //default:
+        //printf("%c 눌림", key);
+
 }
 void initGLBuffer() {
     createPBO(&pbo_dest, &cuda_pbo_dest_resource);
@@ -297,9 +317,10 @@ int main(int argc,char **argv) {
     cudaDeviceSynchronize();
     glutDisplayFunc(renderScene);
     glutKeyboardFunc(keyboard);
+    glutKeyboardUpFunc(keyboardup);
     glutMouseFunc(myMouseWheel);
     glutMotionFunc(myMouseMove);
-    glutTimerFunc(10, doTimer, 1);
+    glutIdleFunc(renderScene);
     initGLBuffer();
     glutMainLoop();
     FreeResource();

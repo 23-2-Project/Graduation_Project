@@ -29,15 +29,17 @@ class camera {
 
         return ray(center, pixel_center- center);//렌즈 처리하려면 center 바꿔야함
     }
-    __device__ void moveorigin(int direction) {
-        lookfrom += movdir[direction];
-        lookat += movdir[direction];
+    __device__ void moveorigin(int direction,int weight) {
+        auto dir = weight*weight*movdir[direction];
+        lookfrom += 0.0005f*dir;
+        lookat += 0.0005f*dir;
         update();
     }
     __device__ void rotate(vec3 direction) {
 
         auto alpha = direction.x() * 90 / 800;
-        auto beta = direction.y() / 50;
+        auto beta = direction.y() * 90 / 450;
+
         vec3 pointto = vec3(cos(degrees_to_radians(beta)) * cos(degrees_to_radians(alpha)),
             cos(degrees_to_radians(beta)) * sin(degrees_to_radians(alpha)),
             sin(degrees_to_radians(beta)));

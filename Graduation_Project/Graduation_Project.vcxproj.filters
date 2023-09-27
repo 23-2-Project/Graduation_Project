@@ -18,6 +18,7 @@
     <ClInclude Include="include\rtweekend.h" />
     <ClInclude Include="include\sphere.h" />
     <ClInclude Include="include\vec3.h" />
+    <ClInclude Include="timer.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />

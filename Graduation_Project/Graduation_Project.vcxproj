@@ -94,6 +94,7 @@
     <ClInclude Include="include\rtweekend.h" />
     <ClInclude Include="include\sphere.h" />
     <ClInclude Include="include\vec3.h" />
+    <ClInclude Include="timer.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
