@@ -279,10 +279,6 @@ void initGL(int *argc, char **argv) {
     glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, white);
     glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, 60.0f);
 }
-void doTimer(int i) {
-    glutPostRedisplay();
-    glutTimerFunc(10, doTimer, 1);
-}
 void myMouseMove(int x, int y) {
     int i = mouse_dx;
     mouse_dx = x - mouse_prev_x;

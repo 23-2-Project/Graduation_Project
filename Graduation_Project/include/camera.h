@@ -2,6 +2,7 @@
 #define CAMERA_H
 #include <rtweekend.h>
 
+#include <math_functions.h>
 #include <hittable.h>
 #include <material.h>
 
@@ -50,8 +51,7 @@ class camera {
         update();
     }
     __device__ void changevfov(int x) {
-
-        vfov += x;
+        vfov = max(15, min((int) 150, (int)vfov + x));
         update();
     }
     __device__ void update() {

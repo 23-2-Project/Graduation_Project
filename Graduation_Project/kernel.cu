@@ -115,7 +115,7 @@ __global__ void RotateCam(camera** ca, vec3 direction) {
 	//(*ca)-origin(direction);
 }
 __global__ void ManipulateVFOV(camera** ca, int x) {
-
+	
 	(*ca)->changevfov(x);
 }
 __global__ void initWorld(hittable** world, hittable** objects,int object_counts) {
