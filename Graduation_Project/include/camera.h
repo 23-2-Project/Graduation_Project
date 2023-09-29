@@ -37,8 +37,8 @@ class camera {
     }
     __device__ void rotate(vec3 direction) {
 
-        auto alpha = direction.x() * 90 / 800;
-        auto beta = direction.y() * 90 / 450;
+        auto alpha = direction.x() * 180 / image_height;
+        auto beta = direction.y() * 180 / image_width;
 
         vec3 pointto = vec3(cos(degrees_to_radians(beta)) * cos(degrees_to_radians(alpha)),
             cos(degrees_to_radians(beta)) * sin(degrees_to_radians(alpha)),
@@ -46,7 +46,6 @@ class camera {
 
         lookat = lookfrom + w * pointto.x() + u * pointto.y() + v * pointto.z();
 
-        printf("%f %f %f\n", lookat.x(), lookat.y(), lookat.z());
 
         update();
     }
@@ -73,9 +72,6 @@ class camera {
         w = unit_vector(lookat - lookfrom);
         u = unit_vector(cross(vup, w));
         v = cross(w, u);
-        printf("%f %f %f\n", w.x(), w.y(), w.z());
-        printf("%f %f %f\n", u.x(), u.y(), u.z());
-        printf("%f %f %f\n", v.x(), v.y(), v.z());
         // Calculate the vectors across the horizontal and down the vertical viewport edges.
         vec3 viewport_u = viewport_width * u;    // Vector across viewport horizontal edge
         vec3 viewport_v = viewport_height * v;  // Vector down viewport vertical edge
