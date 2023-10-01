@@ -122,13 +122,33 @@ __global__ void ManipulateVFOV(camera** ca, int x) {
 	
 	(*ca)->changevfov(x);
 }
-__global__ void initWorld(hittable** world, hittable** objects,int object_counts) {
-
-
+#define RND (curand_uniform(&local_rand_state))
+__global__ void initWorld(curandState* global_state,hittable** world, hittable** objects,int object_counts) {
+	curand_init(0, 0, 0, &global_state[0]);
+	curandState local_rand_state = *global_state;
 	objects[0] = new sphere(vec3(0, -1000.0, 0), 1000, new lambertian(vec3(0.5, 0.5, 0.5)));
-	objects[1] = new sphere(vec3(0, 0, -1), 0.5, new lambertian(vec3(0.7, 0.8, 0.0)));
+	int i = 1;
+	for (int a = -2; a < 2; a++) {
+		for (int b = -2; b < 2; b++) {
+			float choose_mat = RND;
+			vec3 center(a + RND, 0.2, b + RND);
+			if (choose_mat < 0.8f) {
+				objects[i++] = new sphere(center, 0.2,
+					new lambertian(vec3(RND * RND, RND * RND, RND * RND)));
+			}
+			else if (choose_mat < 0.95f) {
+				objects[i++] = new sphere(center, 0.2,
+					new metal(vec3(0.5f * (1.0f + RND), 0.5f * (1.0f + RND), 0.5f * (1.0f + RND)), 0.5f * RND));
+			}
+			else {
+				objects[i++] = new sphere(center, 0.2, new dielectric(1.5));
+			}
+		}
+	}
+
+	//objects[1] = new sphere(vec3(0, 0, -1), 0.5, new lambertian(vec3(0.7, 0.8, 0.0)));
 	//objects[0] = ground;
-	*world = new hittable_list(objects, object_counts);
+	*world = new hittable_list(objects, 17);
 	//(*world)->add(ground);
 }
 extern "C" void initTracing() {
@@ -137,7 +157,9 @@ extern "C" void initTracing() {
 	initCamera << <1, 1 >> > (cam);
 	cudaMalloc((void**) &objects, object_counts * sizeof(hittable*));//오브젝트 개수만큼 할당 필요
 	cudaMalloc((void**)&world, sizeof(hittable*));
-	initWorld << <1, 1 >> > (world, objects,object_counts);
+	curandState* worldinit;
+	cudaMalloc(&worldinit, sizeof(curandState));
+	initWorld << <1, 1 >> > (worldinit,world, objects,object_counts);
 }
 extern "C" void moveCamera(int direction,int weight) {
 	movCam << <1, 1 >> > (cam, direction,weight);
