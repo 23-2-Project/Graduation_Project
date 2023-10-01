@@ -10,6 +10,7 @@ class camera {
   public:
 
       int    max_depth = 10;
+      int    samples_per_pixel = 10;
       vec3 lookat = vec3(0, 0, 0);
       vec3 lookfrom = vec3(0, 0, -1);
     __device__ camera(float ar,int iw,int spp,int md,int vf,vec3 lf,vec3 la,vec3 vu) {
@@ -92,7 +93,6 @@ private:
     vec3* movdir = new vec3[4];
     double aspect_ratio = 1.0;  
     int    image_width = 100;  
-    int    samples_per_pixel = 10;   
 
     double vfov = 90;              
     vec3   vup = vec3(0, 1, 0);     

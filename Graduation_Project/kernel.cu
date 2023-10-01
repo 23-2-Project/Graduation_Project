@@ -62,7 +62,7 @@ __device__ vec3 ray_color(curandState *state,const ray& r,int depth,const hittab
 	}
 	return vec3(0.0, 0.0, 0.0);
 }
-__global__ void CalculatePerPixel(hittable** world, camera** camera, curandState* global_rand_state, int spp, unsigned int* g_odata, int imgh, int imgw) {
+__global__ void CalculatePerPixel(hittable** world, camera** camera, curandState* global_rand_state, unsigned int* g_odata, int imgh, int imgw) {
 
 	int tx = threadIdx.x;
 	int ty = threadIdx.y;
@@ -86,19 +86,23 @@ __global__ void CalculatePerPixel(hittable** world, camera** camera, curandState
 	vec3 color(0, 0, 0);
 
 	int depth = (*camera)->max_depth;
+	int spp = (*camera)->samples_per_pixel;
 	ray r = (*camera)->get_ray(&local_rand_state, i, j);
-	vec3 pc = ray_color(&local_rand_state, r, depth, world);
+	for (int i = 0; i < spp; i++) {
+		color += ray_color(&local_rand_state, r, depth, world);
+	}
+	//vec3 pc = ray_color(&local_rand_state, r, depth, world);
 	//vec3 pc = ray_color(r);
 	color /= float(spp);
 	//g_odata[index] = rgbToInt((float)x / 800 * 255, (float)y / 800 * 255, 0);
 	global_rand_state[index] = local_rand_state;
-	g_odata[i + j * imgw] = vectorgb(pc);
+	g_odata[i + j * imgw] = vectorgb(color);
 }
 __global__ void initCamera(camera** ca) {
 
 	*ca = new camera(16.0 / 9.0, //종횡비
 		1600, //이미지 가로길이
-		10,  //픽셀당 샘플수
+		2,  //픽셀당 샘플수
 		50,  //반사 횟수
 		90,  //시야각
 		vec3(0, 0, 0), //카메라 위치 
@@ -163,5 +167,5 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 
 extern "C" void generatePixel(dim3 grid, dim3 block, int sbytes,
 	unsigned int* g_odata, int imgh, int imgw) {
-	CalculatePerPixel << <grid, block, sbytes >> > (world, cam, random_state, 10, g_odata, imgh, imgw);
+	CalculatePerPixel << <grid, block, sbytes >> > (world, cam, random_state, g_odata, imgh, imgw);
 }
