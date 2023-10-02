@@ -19,6 +19,7 @@
     <ClInclude Include="include\sphere.h" />
     <ClInclude Include="include\vec3.h" />
     <ClInclude Include="timer.h" />
+    <ClInclude Include="include\triangle.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />

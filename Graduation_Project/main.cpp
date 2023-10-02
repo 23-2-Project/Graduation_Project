@@ -303,6 +303,25 @@ void myMouseWheel(int button, int dir, int x, int y) {
         }
     }
 }
+void LoadOBJ(const char* FileName) {
+    std::ifstream input(FileName);
+    while (input) {
+        std::string s;
+        input >> s;
+        double x, y, z;
+        if (s == "v") {
+            input >> x >> y >> z;
+
+        }
+        else if (s == "vn") {
+
+        }
+        else if (s == "f") {
+            std::string a, b, c;
+            input >> a >> b >> c;
+        }
+    }
+}
 int main(int argc,char **argv) {
     initGL(&argc, argv);
     initTracing();

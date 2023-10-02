@@ -102,7 +102,7 @@ __global__ void initCamera(camera** ca) {
 
 	*ca = new camera(16.0 / 9.0, //종횡비
 		1600, //이미지 가로길이
-		2,  //픽셀당 샘플수
+		1,  //픽셀당 샘플수
 		50,  //반사 횟수
 		90,  //시야각
 		vec3(0, 0, 0), //카메라 위치 
@@ -138,7 +138,7 @@ __global__ void initWorld(curandState* global_state,hittable** world, hittable**
 			}
 			else if (choose_mat < 0.95f) {
 				objects[i++] = new sphere(center, 0.2,
-					new metal(vec3(0.5f * (1.0f + RND), 0.5f * (1.0f + RND), 0.5f * (1.0f + RND)), 0.5f * RND));
+					new metal(vec3(0.5f * (1.0f + RND), 0.5f * (1.0f + RND), 0.5f * (1.0f + RND)), 0.0f/*0.5f * RND*/));
 			}
 			else {
 				objects[i++] = new sphere(center, 0.2, new dielectric(1.5));
