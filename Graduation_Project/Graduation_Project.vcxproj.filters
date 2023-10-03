@@ -20,6 +20,7 @@
     <ClInclude Include="include\vec3.h" />
     <ClInclude Include="timer.h" />
     <ClInclude Include="include\triangle.h" />
+    <ClInclude Include="include\obj.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
