@@ -8,6 +8,7 @@ public:
 	hittable** list;
 	int max_size;
 	int now_size;
+	aabb bbox;
 
 	__device__ hittable_list(int n) {
 		max_size = n;
@@ -15,9 +16,14 @@ public:
 		now_size = 0;
 	}
 
+	__device__ hittable_list(hittable* object,int n) : hittable_list(n) {
+		add(object);
+	}
+
 	__device__ void add(hittable* object) {
 		//objects.push_back(object);
 		list[now_size++] = object;
+		bbox = aabb(bbox, object->bounding_box());
 	}
 
 	__device__ bool hit(const ray& r, float t_min, float t_max, hit_record& rec) const {
@@ -33,6 +39,8 @@ public:
 		}
 		return hit_anything;
 	}
+
+	__device__ aabb bounding_box() const override { return bbox; }
 };
 
 #endif

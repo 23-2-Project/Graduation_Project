@@ -90,6 +90,8 @@
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="include\aabb.h" />
+    <ClInclude Include="include\bvh.h" />
     <ClInclude Include="include\camera.h" />
     <ClInclude Include="include\hittable.h" />
     <ClInclude Include="include\hittable_list.h" />

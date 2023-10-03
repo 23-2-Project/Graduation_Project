@@ -28,10 +28,16 @@ __device__ inline double random_double(curandState* state) {
     //static std::mt19937 generator;
     return curand_uniform(state);
 }
-__device__ inline double random_double(curandState* state,double min, double max) {
+__device__ inline double random_double(curandState* state, double min, double max) {
     // Returns a random real in [min,max).
-    return min + (max-min)*random_double(state);
+    return min + (max - min) * random_double(state);
 }
+
+__device__ inline int random_int(curandState* state, int min, int max) {
+    // Returns a random integer in [min,max].
+    return static_cast<int>(random_double(state, min, max + 1));
+}
+
 // Common Headers
 
 #include "interval.h"

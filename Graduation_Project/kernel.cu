@@ -10,11 +10,12 @@
 #include <material.h>
 #include <vec3.h>
 #include <camera.h>
+#include <bvh.h>
 
 hittable_list** world;
 //hittable** objects;
 camera** cam;
-int object_counts = 17;
+int object_counts = 101;
 
 curandState* random_state;
 // convert floating point rgb color to 8-bit integer
@@ -124,8 +125,8 @@ __global__ void initWorld(curandState* global_state, hittable_list** world, int 
 	(*world) = new hittable_list(object_counts);
 
 	(*world)->add(new sphere(vec3(0, -1000.0, 0), 1000, new lambertian(vec3(0.5, 0.5, 0.5))));
-	for (int a = -2; a < 2; a++) {
-		for (int b = -2; b < 2; b++) {
+	for (int a = -5; a < 5; a++) {
+		for (int b = -5; b < 5; b++) {
 			float choose_mat = RND;
 			vec3 center(a + RND, 0.2, b + RND);
 			if (choose_mat < 0.8f) {
@@ -139,6 +140,7 @@ __global__ void initWorld(curandState* global_state, hittable_list** world, int 
 			}
 		}
 	}
+	(*world) = new hittable_list((hittable*)new bvh_node(world, &local_rand_state), object_counts);
 }
 
 extern "C" void initTracing() {
