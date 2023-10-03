@@ -10,10 +10,11 @@
 #include <material.h>
 #include <vec3.h>
 #include <camera.h>
-hittable** world;
-hittable** objects;
+
+hittable_list** world;
+//hittable** objects;
 camera** cam;
-int object_counts = 2;
+int object_counts = 17;
 
 curandState* random_state;
 // convert floating point rgb color to 8-bit integer
@@ -35,7 +36,7 @@ __device__ int vectorgb(vec3 color) {
 //	return  c;
 //}
 
-__device__ vec3 ray_color(curandState *state,const ray& r,int depth,const hittable** world) {
+__device__ vec3 ray_color(curandState *state,const ray& r,int depth, hittable_list** world) {
 	ray cur_ray = r;
 	vec3 cur_attenuation = vec3(1.0, 1.0, 1.0);
 	for (int i = 0; i < depth; i++) {
@@ -62,8 +63,7 @@ __device__ vec3 ray_color(curandState *state,const ray& r,int depth,const hittab
 	}
 	return vec3(0.0, 0.0, 0.0);
 }
-__global__ void CalculatePerPixel(hittable** world, camera** camera, curandState* global_rand_state, unsigned int* g_odata, int imgh, int imgw) {
-
+__global__ void CalculatePerPixel(hittable_list** world, camera** camera, curandState* global_rand_state, unsigned int* g_odata, int imgh, int imgw) {
 	int tx = threadIdx.x;
 	int ty = threadIdx.y;
 	int bw = blockDim.x;
@@ -71,12 +71,6 @@ __global__ void CalculatePerPixel(hittable** world, camera** camera, curandState
 	int i = blockIdx.x * bw + tx;
 	int j = blockIdx.y * bh + ty;
 	int index = i + j * imgh;
-
-
-
-
-
-
 
 	//ray r(camera_center, ray_direction);
 	//vec3 pc = ray_color(r);
@@ -122,44 +116,39 @@ __global__ void ManipulateVFOV(camera** ca, int x) {
 	
 	(*ca)->changevfov(x);
 }
+
 #define RND (curand_uniform(&local_rand_state))
-__global__ void initWorld(curandState* global_state,hittable** world, hittable** objects,int object_counts) {
+__global__ void initWorld(curandState* global_state, hittable_list** world, int object_counts) {
 	curand_init(0, 0, 0, &global_state[0]);
 	curandState local_rand_state = *global_state;
-	objects[0] = new sphere(vec3(0, -1000.0, 0), 1000, new lambertian(vec3(0.5, 0.5, 0.5)));
-	int i = 1;
+	(*world) = new hittable_list(object_counts);
+
+	(*world)->add(new sphere(vec3(0, -1000.0, 0), 1000, new lambertian(vec3(0.5, 0.5, 0.5))));
 	for (int a = -2; a < 2; a++) {
 		for (int b = -2; b < 2; b++) {
 			float choose_mat = RND;
 			vec3 center(a + RND, 0.2, b + RND);
 			if (choose_mat < 0.8f) {
-				objects[i++] = new sphere(center, 0.2,
-					new lambertian(vec3(RND * RND, RND * RND, RND * RND)));
+				(*world)->add(new sphere(center, 0.2, new lambertian(vec3(RND * RND, RND * RND, RND * RND))));
 			}
 			else if (choose_mat < 0.95f) {
-				objects[i++] = new sphere(center, 0.2,
-					new metal(vec3(0.5f * (1.0f + RND), 0.5f * (1.0f + RND), 0.5f * (1.0f + RND)), 0.0f/*0.5f * RND*/));
+				(*world)->add(new sphere(center, 0.2, new metal(vec3(0.5f * (1.0f + RND), 0.5f * (1.0f + RND), 0.5f * (1.0f + RND)), 0.0f/*0.5f * RND*/)));
 			}
 			else {
-				objects[i++] = new sphere(center, 0.2, new dielectric(1.5));
+				(*world)->add(new sphere(center, 0.2, new dielectric(1.5)));
 			}
 		}
 	}
-
-	//objects[1] = new sphere(vec3(0, 0, -1), 0.5, new lambertian(vec3(0.7, 0.8, 0.0)));
-	//objects[0] = ground;
-	*world = new hittable_list(objects, 17);
-	//(*world)->add(ground);
 }
-extern "C" void initTracing() {
 
+extern "C" void initTracing() {
 	cudaMalloc(&cam, sizeof(camera*));
 	initCamera << <1, 1 >> > (cam);
-	cudaMalloc((void**) &objects, object_counts * sizeof(hittable*));//오브젝트 개수만큼 할당 필요
-	cudaMalloc((void**)&world, sizeof(hittable*));
+	//cudaMalloc((void**) &objects, object_counts * sizeof(hittable*));//오브젝트 개수만큼 할당 필요
+	cudaMalloc((void**)&world, sizeof(hittable_list*));
 	curandState* worldinit;
 	cudaMalloc(&worldinit, sizeof(curandState));
-	initWorld << <1, 1 >> > (worldinit,world, objects,object_counts);
+	initWorld << <1, 1 >> > (worldinit,world,object_counts);
 }
 extern "C" void moveCamera(int direction,int weight) {
 	movCam << <1, 1 >> > (cam, direction,weight);
