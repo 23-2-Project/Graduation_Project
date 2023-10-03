@@ -2,31 +2,49 @@
 #define INTERVAL_H
 
 class interval {
-  public:
-    double minv, maxv;
+public:
+	float minv, maxv;
 
-    __device__ interval() : minv(+infinity), maxv(-infinity) {} // Default interval is empty
+	__device__ interval() : minv(+infinity), maxv(-infinity) {} // Default interval is empty
 
-    __device__ interval(double _min, double _max) : minv(_min), maxv(_max) {}
+	__device__ interval(float _min, float _max) : minv(_min), maxv(_max) {}
 
-    __device__ bool contains(double x) const {
-        return minv <= x && x <= maxv;
-    }
+	__device__ interval(const interval& a, const interval& b) : minv(fmin(a.minv, b.minv)), maxv(fmax(a.maxv, b.maxv)) {}
 
-    __device__ bool surrounds(double x) const {
-        return minv < x && x < maxv;
-    }
+	__device__ float size() const {
+		return maxv - minv;
+	}
 
-    __device__ double clamp(double x) const {
-        if (x < minv) return minv;
-        if (x > maxv) return maxv;
-        return x;
-    }
-    static const interval empty, universe;
+	__device__ interval expand(float delta) const {
+		auto padding = delta / 2;
+		return interval(minv - padding, maxv + padding);
+	}
+
+	__device__ bool contains(float x) const {
+		return minv <= x && x <= maxv;
+	}
+
+	__device__ bool surrounds(float x) const {
+		return minv < x&& x < maxv;
+	}
+
+	__device__ float clamp(float x) const {
+		if (x < minv) return minv;
+		if (x > maxv) return maxv;
+		return x;
+	}
+	static const interval empty, universe;
 };
 
-const static interval empty   (+infinity, -infinity);
+const static interval empty(+infinity, -infinity);
 const static interval universe(-infinity, +infinity);
 
+__device__ interval operator+(const interval& ival, float displacement) {
+	return interval(ival.minv + displacement, ival.maxv + displacement);
+}
+
+__device__ interval operator+(float displacement, const interval& ival) {
+	return ival + displacement;
+}
 
 #endif
