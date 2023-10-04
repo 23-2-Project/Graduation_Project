@@ -364,9 +364,9 @@ void LoadOBJ(const char* FileName) {
 int main(int argc,char **argv) {
     initGL(&argc, argv);
     initObjects();
-    LoadOBJ("teapot.obj");
     cudaDeviceSynchronize();
     initTracing();
+    LoadOBJ("teapot.obj");
     initCuda(grid,block,image_height,image_width,pixels);
     findCudaDevice(argc, (const char **)argv);
 

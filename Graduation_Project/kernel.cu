@@ -17,7 +17,7 @@
 hittable_list** world;
 //hittable** objects;
 camera** cam;
-int object_counts = 101;
+int object_counts = 285;
 
 curandState* random_state;
 // convert floating point rgb color to 8-bit integer
@@ -102,7 +102,7 @@ __global__ void initCamera(camera** ca) {
 		1,  //픽셀당 샘플수
 		50,  //반사 횟수
 		90,  //시야각
-		vec3(0, 0, 0), //카메라 위치 
+		vec3(-50, 0, 0), //카메라 위치 
 		vec3(0, 0, -1), //바라보는곳
 		vec3(0, 1, 0)); //업벡터
 
@@ -127,24 +127,31 @@ __global__ void initWorld(curandState* global_state, hittable_list** world, int 
 	(*world) = new hittable_list(object_counts);
 
 	(*world)->add(new sphere(vec3(0, -1000.0, 0), 1000, new lambertian(vec3(0.5, 0.5, 0.5))));
-	for (int a = -5; a < 5; a++) {
+	for (int a = -2; a < 2; a++) {
 		for (int b = -2; b < 2; b++) {
 			float choose_mat = RND;
 			vec3 center(a + RND, 0.2, b + RND);
 			if (choose_mat < 0.8f) {
-					new lambertian(vec3(RND * RND, RND * RND, RND * RND)));
+				(*world)->add(new sphere(center, 0.2, new lambertian(vec3(RND * RND, RND * RND, RND * RND))));
 			}
 			else if (choose_mat < 0.95f) {
-					new metal(vec3(0.5f * (1.0f + RND), 0.5f * (1.0f + RND), 0.5f * (1.0f + RND)), 0.0f/*0.5f * RND*/));
+				(*world)->add(new sphere(center, 0.2, new metal(vec3(0.5f * (1.0f + RND), 0.5f * (1.0f + RND), 0.5f * (1.0f + RND)), 0.0f/*0.5f * RND*/)));
 			}
 			else {
 				(*world)->add(new sphere(center, 0.2, new dielectric(1.5)));
 			}
 		}
 	}
+	//(*world) = new hittable_list((hittable*)new bvh_node(world, &local_rand_state), object_counts);
+}
+
+__global__ void makeBVH(curandState* global_state, hittable_list** world, int object_counts) {
+	printf("%d개\n", (*world)->now_size);
+	curand_init(0, 0, 0, &global_state[0]);
+	curandState local_rand_state = *global_state;
 	(*world) = new hittable_list((hittable*)new bvh_node(world, &local_rand_state), object_counts);
 }
-}
+
 extern "C" void initTracing() {
 	cudaMalloc(&cam, sizeof(camera*));
 	initCamera << <1, 1 >> > (cam);
@@ -173,24 +180,29 @@ __global__ void Random_Init(curandState* global_state, int ih) {
 	curandState s;
 	curand_init(pixel_index, 0, 0, &global_state[pixel_index]);
 }
-__global__ void addTriangle(hittable** objects,vec3 a,vec3 b,vec3 c,int obj_cnt) {
-	objects[obj_cnt] = new triangle(a, b, c, new lambertian(vec3(0.5f, 0.0f, 0.0f)));
+__global__ void addTriangle(hittable_list** world, vec3 a, vec3 b, vec3 c) {
+	//objects[obj_cnt] = new triangle(a, b, c, new lambertian(vec3(0.5f, 0.0f, 0.0f)));
+	(*world)->add(new triangle(a, b, c, new lambertian(vec3(0.5f, 0.0f, 0.0f))));
+	printf("%d\n", (*world)->now_size);
 }
 extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_width, int pixels) {
 	cudaMalloc(&random_state, pixels * sizeof(curandState));
 	Random_Init << <grid, block, 0 >> > (random_state, image_height);
 }
-extern "C" void importOBJ(int v_counts, int f_counts, double** vlist, int** flist){
+extern "C" void importOBJ(int v_counts, int f_counts, double** vlist, int** flist) {
 	for (int i = 0; i < f_counts; i++) {
 		vec3 a(vlist[flist[i][0]][0], vlist[flist[i][0]][1], vlist[flist[i][0]][2]);
 		vec3 b(vlist[flist[i][1]][0], vlist[flist[i][1]][1], vlist[flist[i][1]][2]);
 		vec3 c(vlist[flist[i][2]][0], vlist[flist[i][2]][1], vlist[flist[i][2]][2]);
-		addTriangle << <1, 1 >> > (objects,a,b,c,object_counts++);
+		addTriangle << <1, 1 >> > (world, a, b, c);
 	}
-	printf("개수 %d\n", object_counts);
+	curandState* bvh_state;
+	cudaMalloc(&bvh_state, sizeof(curandState));
+	makeBVH << <1, 1 >> > (bvh_state, world, object_counts);
+	//printf("개수 %d\n", object_counts);
 }
 extern "C" void initObjects() {
-	cudaMalloc((void**)&objects, 305 * sizeof(hittable*));//오브젝트 개수만큼 할당 필요
+	//cudaMalloc((void**)&objects, 305 * sizeof(hittable*));//오브젝트 개수만큼 할당 필요
 }
 extern "C" void generatePixel(dim3 grid, dim3 block, int sbytes,
 	unsigned int* g_odata, int imgh, int imgw) {
