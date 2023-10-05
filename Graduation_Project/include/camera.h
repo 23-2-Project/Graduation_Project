@@ -51,6 +51,33 @@ class camera {
 
         update();
     }
+    __device__ vec3 ray_color(curandState* state, const ray& r, int depth, hittable_list** world) {
+        ray cur_ray = r;
+        vec3 cur_attenuation = vec3(1.0, 1.0, 1.0);
+        for (int i = 0; i < depth; i++) {
+            hit_record rec;
+            //if(false){
+            if ((*world)->hit(cur_ray, 0.001f, FLT_MAX, rec)) {
+                ray scattered;
+                vec3 attenuation;
+                if (rec.mat->scatter(cur_ray, rec, attenuation, scattered, state)) {
+                    cur_ray = scattered;
+                    cur_attenuation *= attenuation;
+                }
+                else {
+                    return vec3(0.0, 0.0, 0.0);
+                }
+            }
+            else {
+                vec3 unit_direction = unit_vector(cur_ray.direction());
+                float t = 0.5f * (unit_direction.y() + 1.0f);
+                vec3 c = (1.0f - t) * vec3(1.0, 1.0, 1.0) + t * vec3(0.5, 0.7, 1.0);
+                return cur_attenuation * c;
+            }
+
+        }
+        return vec3(0.0, 0.0, 0.0);
+    }
     __device__ void changevfov(int x) {
         vfov = max(15, min((int) 150, (int)vfov + x));
         update();

@@ -35,26 +35,10 @@ static const char* glsl_draw_fragmentShader =
 "}\n";
 extern "C" void generatePixel(dim3 grid, dim3 block, int sbytes,
     unsigned int* g_odata, int imgh,int imgw);
-extern "C" void initTracing();
-extern "C" void initObjects();
 extern "C" void initCuda(dim3 grid, dim3 block,int image_height, int image_width,int pixels);
 extern "C" void moveCamera(int direction,int weight);
 extern "C" void RotateCamera(int x, int y);
 extern "C" void manivfov(int x);
-extern "C" void importOBJ(int v_counts,int f_counts,double **vlist,int **flist);
-std::vector<std::string> split(std::string str, char Delimiter) {
-    std::istringstream iss(str);             // istringstream에 str을 담는다.
-    std::string buffer;                      // 구분자를 기준으로 절삭된 문자열이 담겨지는 버퍼
-
-    std::vector<std::string> result;
-
-    // istringstream은 istream을 상속받으므로 getline을 사용할 수 있다.
-    while (getline(iss, buffer, Delimiter)) {
-        result.push_back(buffer);               // 절삭된 문자열을 vector에 저장
-    }
-
-    return result;
-}
 void createPBO(GLuint* pbo, struct cudaGraphicsResource** pbo_resource) {
     // set up vertex data parameter
     num_texels = image_width * image_height;
@@ -318,59 +302,11 @@ void myMouseWheel(int button, int dir, int x, int y) {
         }
     }
 }
-void LoadOBJ(const char* FileName) {
-    std::ifstream input(FileName);
-    double** vertices = new double* [100000];
-    int** faces = new int* [100000];
-    int v_counts = 0, f_counts = 0;
-    double x, y, z;
-    int fx, fy, fz;
-    while (input) {
-        std::string s;
-        input >> s;
-        if (s == "v") {
-            input >> x >> y >> z;
-            vertices[v_counts] = new double[3];
-            vertices[v_counts][0] = x;
-            vertices[v_counts][1] = y;
-            vertices[v_counts++][2] = z;
-        }
-        else if (s == "vn") {
-
-        }
-        else if (s == "f") {
-            std::string a, b, c;
-            input >> a >> b >> c;
-            if (a.find('/') != std::string::npos) {
-                std::vector<std::string> alist, blist, clist;
-                alist = split(a, '/');
-                blist = split(b, '/');
-                clist = split(c, '/');
-                faces[f_counts] = new int[3];
-                faces[f_counts][0] = stoi(alist[0]) - 1;
-                faces[f_counts][1] = stoi(blist[0]) - 1;
-                faces[f_counts++][2] = stoi(clist[0]) - 1;
-            }
-            else {
-                faces[f_counts] = new int[3];
-                faces[f_counts][0] = stoi(a) - 1;
-                faces[f_counts][1] = stoi(b) - 1;
-                faces[f_counts++][2] = stoi(c) - 1;
-            }
-        }
-    }
-    importOBJ(v_counts, f_counts, vertices, faces);
-}
 int main(int argc,char **argv) {
     initGL(&argc, argv);
-    initObjects();
-    cudaDeviceSynchronize();
-    initTracing();
-    LoadOBJ("teapot.obj");
     initCuda(grid,block,image_height,image_width,pixels);
     findCudaDevice(argc, (const char **)argv);
 
-    std::cout << "GLContext" << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
     cudaDeviceSynchronize();
     glutDisplayFunc(renderScene);
     glutKeyboardFunc(keyboard);

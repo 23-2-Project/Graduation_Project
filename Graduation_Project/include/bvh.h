@@ -34,9 +34,7 @@ public:
 			}
 		}
 		else {
-			// 정렬하는 부분
-			//std::sort(objects[0] + start, objects[0] + end, comparator);
-			hittable* tmp = (hittable*)malloc(sizeof(hittable));
+			hittable* tmp;
 			for (int i = start; i < end - 1; ++i) {
 				for (int j = i; j < end - 1; ++j) {
 					if (!comparator(src_objects[j], src_objects[j + 1])) {
