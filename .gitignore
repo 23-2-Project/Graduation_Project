@@ -363,6 +363,6 @@ MigrationBackup/
 FodyWeavers.xsd
 
 #프로젝트 설정파일
-*.vcxproj
-*.vcxproj.filters
-*.vcxproj.users
+/Graduation_Project/Graduation_Project.vcxproj
+/Graduation_Project/Graduation_Project.vcxproj.filters
+/Graduation_Project/Graduation_Project.vcxproj.users

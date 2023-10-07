@@ -95,6 +95,7 @@ __global__ void addObjects(curandState* global_state, hittable_list** world, int
 	curand_init(0, 0, 0, &global_state[0]);
 	curandState local_rand_state = *global_state;
 	(*world)->add(new sphere(vec3(0, -1000.0, 0), 1000, new lambertian(vec3(0.5, 0.5, 0.5))));
+	int i = 0;
 	for (int a = -2; a < 2; a++) {
 		for (int b = -2; b < 2; b++) {
 			float choose_mat = RND;
@@ -108,6 +109,7 @@ __global__ void addObjects(curandState* global_state, hittable_list** world, int
 			else {
 				(*world)->add(new sphere(center, 0.2, new dielectric(1.5)));
 			}
+			printf("체크%d\n", i++);
 		}
 	}
 }
@@ -117,7 +119,9 @@ __global__ void makeBVH(curandState* global_state, hittable_list** world, int ob
 	curandState local_rand_state = *global_state;
 	(*world) = new hittable_list((hittable*)new bvh_node(world, &local_rand_state), object_counts);
 }
-
+__global__ void addTriangle(hittable_list** world,vec3 a,vec3 b,vec3 c) {
+	//(*world)->add(new triangle(a, b, c, new lambertian(vec3(0.5f, 0.0f, 0.0f))));
+}
 __global__ void Random_Init(curandState* global_state, int ih) {
 	int tx = threadIdx.x;
 	int ty = threadIdx.y;
@@ -139,30 +143,33 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 	initWorld << <1, 1 >> > (world, object_counts); cudaDeviceSynchronize();
 	//월드 초기화 OBJ 읽기 및 카메라 등
 	Assimp::Importer importer;
-	const aiScene* scene = importer.ReadFile("FileName.obj", aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
+	const aiScene* scene = importer.ReadFile("teapot.obj", aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
 	
 	if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) // if is Not Zero
 	{
 		printf("Read File Exception\n");
 	}
-	//int cnt = 0;
-	//for (int i = 0; i < scene->mNumMeshes; i++) {
-	//	auto mesh = scene->mMeshes[i];
-	//	for (int j = 0; j < mesh->mNumFaces; j++) {
-	//		auto Face = mesh->mFaces[j];
-	//		/*newTriangle(mesh->mVertices[Face.mIndices[0]].x,
-	//			mesh->mVertices[Face.mIndices[0]].y,
-	//			mesh->mVertices[Face.mIndices[0]].z,
+	for (int i = 0; i < scene->mNumMeshes; i++) {
+		auto mesh = scene->mMeshes[i];
+		for (int j = 0; j < mesh->mNumFaces; j++) {
+			auto Face = mesh->mFaces[j];
+			addTriangle << <1, 1 >> > (world,
+				vec3(mesh->mVertices[Face.mIndices[0]].x, mesh->mVertices[Face.mIndices[0]].y, mesh->mVertices[Face.mIndices[0]].z),
+				vec3(mesh->mVertices[Face.mIndices[1]].x, mesh->mVertices[Face.mIndices[1]].y, mesh->mVertices[Face.mIndices[1]].z),
+				vec3(mesh->mVertices[Face.mIndices[2]].x, mesh->mVertices[Face.mIndices[2]].y, mesh->mVertices[Face.mIndices[2]].z));
+			/*newTriangle(mesh->mVertices[Face.mIndices[0]].x,
+				mesh->mVertices[Face.mIndices[0]].y,
+				mesh->mVertices[Face.mIndices[0]].z,
 
-	//			mesh->mVertices[Face.mIndices[1]].x,
-	//			mesh->mVertices[Face.mIndices[1]].y,
-	//			mesh->mVertices[Face.mIndices[1]].z,
+				mesh->mVertices[Face.mIndices[1]].x,
+				mesh->mVertices[Face.mIndices[1]].y,
+				mesh->mVertices[Face.mIndices[1]].z,
 
-	//			mesh->mVertices[Face.mIndices[2]].x,
-	//			mesh->mVertices[Face.mIndices[2]].y,
-	//			mesh->mVertices[Face.mIndices[2]].z);*/
-	//	}
-	//}
+				mesh->mVertices[Face.mIndices[2]].x,
+				mesh->mVertices[Face.mIndices[2]].y,
+				mesh->mVertices[Face.mIndices[2]].z);*/
+		}
+	}
 	
 
 
