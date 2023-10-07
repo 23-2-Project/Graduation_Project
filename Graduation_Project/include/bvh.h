@@ -10,44 +10,85 @@
 
 class bvh_node : public hittable {
 public:
-	__device__ bvh_node(hittable_list** h_list, curandState* state) : bvh_node((*h_list)->list, 0, (*h_list)->now_size, state) {}
+	__device__ bvh_node() {};
 
-	__device__ bvh_node(hittable** src_objects, size_t start, size_t end, curandState* state) {
+	__device__ bvh_node(hittable_list** world, bvh_node** bvh_list, curandState* state ) {
+		hittable** objects = (*world)->list;
+		int object_num = (*world)->now_size;
+
+		int startIdx = 1 << 30;
+		while (true) {
+			if ((startIdx >> 1) > object_num) { startIdx >>= 1; }
+			else { break; }
+		}
+
+		bvh_list = (bvh_node**)malloc((startIdx << 1) * sizeof(bvh_node*));
+		for (int i = 0; i < (startIdx << 1); ++i) {
+			bvh_list[i] = new bvh_node();
+		}
+
 		int axis = random_int(state, 0, 2);
 		auto comparator = (axis == 0) ? box_x_compare
 			: (axis == 1) ? box_y_compare
 			: box_z_compare;
 
-		size_t object_span = end - start;
-
-		if (object_span == 1) {
-			left = right = src_objects[start];
+		if (object_num == 1) {
+			left = right = objects[0];
 		}
-		else if (object_span == 2) {
-			if (comparator(src_objects[start], src_objects[start + 1])) {
-				left = src_objects[start];
-				right = src_objects[start + 1];
+		else if (object_num == 2) {
+			if (comparator(objects[0], objects[1])) {
+				left = objects[0];
+				right = objects[1];
 			}
 			else {
-				left = src_objects[start + 1];
-				right = src_objects[start];
+				left = objects[1];
+				right = objects[0];
 			}
 		}
 		else {
+			// 정렬하는 부분
 			hittable* tmp;
-			for (int i = start; i < end - 1; ++i) {
-				for (int j = i; j < end - 1; ++j) {
-					if (!comparator(src_objects[j], src_objects[j + 1])) {
-						tmp = src_objects[j];
-						src_objects[j] = src_objects[j + 1];
-						src_objects[j + 1] = tmp;
+			for (int i = 0; i < object_num - 1; ++i) {
+				for (int j = i; j < object_num - 1; ++j) {
+					if (!comparator(objects[j], objects[j + 1])) {
+						tmp = objects[j];
+						objects[j] = objects[j + 1];
+						objects[j + 1] = tmp;
 					}
 				}
 			}
 
-			auto mid = start + object_span / 2;
-			left = new bvh_node(src_objects, start, mid, state);
-			right = new bvh_node(src_objects, mid, end, state);
+			// bvh 트리 생성
+			for (int i = 0; i < object_num; ++i) {
+				int parent = (i + startIdx) / 2;
+				if (i % 2 == 0) { bvh_list[parent]->left = objects[i]; }
+				else { 
+					bvh_list[parent]->right = objects[i]; 
+					bvh_list[parent]->bbox = aabb(bvh_list[parent]->left->bounding_box(), bvh_list[parent]->right->bounding_box());
+				}
+			}
+
+			for (int i = object_num + startIdx; i < startIdx * 2; ++i) {
+				if (i % 2 == 0) { bvh_list[i / 2]->left = bvh_list[i]; }
+				else {
+					bvh_list[i / 2]->right = bvh_list[i];
+					if (i == object_num + startIdx) {
+						bvh_list[i / 2]->bbox = bvh_list[i / 2]->left->bounding_box();
+					}
+					else {
+						bvh_list[i / 2]->bbox = aabb();
+					}				
+				}
+			}
+
+			for (int i = startIdx / 2 - 1; i >= 2; --i) {
+				bvh_list[i]->left = bvh_list[i * 2];
+				bvh_list[i]->right = bvh_list[i * 2 + 1];
+				bvh_list[i]->bbox = aabb(bvh_list[i]->left->bounding_box(), bvh_list[i]->right->bounding_box());
+			}
+
+			left = bvh_list[2];
+			right = bvh_list[3];
 		}
 
 		bbox = aabb(left->bounding_box(), right->bounding_box());

@@ -18,11 +18,11 @@
 #include <assimp/postprocess.h>
 
 hittable_list** world;
-//hittable** objects;
+bvh_node** bvh_list;
 camera** cam;
-int object_counts = 29000;
-
+int object_counts = 80000;
 curandState* random_state;
+
 // convert floating point rgb color to 8-bit integer
 __device__ float clamp(double x, double a, double b) { return max(a, min(b, x)); }
 __device__ int rgbToInt(double r, double g, double b) {
@@ -76,16 +76,14 @@ __global__ void CalculatePerPixel(hittable_list** world, camera** camera, curand
 	g_odata[i + j * imgw] = vectorgb(color);
 }
 __global__ void initCamera(camera** ca) {
-
 	*ca = new camera(16.0 / 9.0, //종횡비
 		1600, //이미지 가로길이
 		1,  //픽셀당 샘플수
 		50,  //반사 횟수
 		90,  //시야각
-		vec3(-50, 0, 0), //카메라 위치 
+		vec3(-20, 0, 0), //카메라 위치 
 		vec3(0, 0, -1), //바라보는곳
 		vec3(0, 1, 0)); //업벡터
-
 }
 __global__ void initWorld(hittable_list** world, int object_counts) {
 	(*world) = new hittable_list(object_counts);
@@ -95,9 +93,9 @@ __global__ void addObjects(curandState* global_state, hittable_list** world, int
 	curand_init(0, 0, 0, &global_state[0]);
 	curandState local_rand_state = *global_state;
 	(*world)->add(new sphere(vec3(0, -1000.0, 0), 1000, new lambertian(vec3(0.5, 0.5, 0.5))));
-	int i = 0;
-	for (int a = -2; a < 2; a++) {
-		for (int b = -2; b < 2; b++) {
+
+	for (int a = 0; a < 0; a++) {
+		for (int b = 0; b < 0; b++) {
 			float choose_mat = RND;
 			vec3 center(a + RND, 0.2, b + RND);
 			if (choose_mat < 0.8f) {
@@ -109,18 +107,17 @@ __global__ void addObjects(curandState* global_state, hittable_list** world, int
 			else {
 				(*world)->add(new sphere(center, 0.2, new dielectric(1.5)));
 			}
-			printf("체크%d\n", i++);
 		}
 	}
 }
-__global__ void makeBVH(curandState* global_state, hittable_list** world, int object_counts) {
+__global__ void makeBVH(curandState* global_state, hittable_list** world, bvh_node** bvh_list, int object_counts) {
 	printf("%d개\n", (*world)->now_size);
 	curand_init(0, 0, 0, &global_state[0]);
 	curandState local_rand_state = *global_state;
-	(*world) = new hittable_list((hittable*)new bvh_node(world, &local_rand_state), object_counts);
+	(*world) = new hittable_list((hittable*)new bvh_node(world, bvh_list, &local_rand_state), object_counts);
 }
 __global__ void addTriangle(hittable_list** world,vec3 a,vec3 b,vec3 c) {
-	//(*world)->add(new triangle(a, b, c, new lambertian(vec3(0.5f, 0.0f, 0.0f))));
+	(*world)->add(new triangle(a, b, c, new lambertian(vec3(0.5f, 0.0f, 0.0f))));
 }
 __global__ void Random_Init(curandState* global_state, int ih) {
 	int tx = threadIdx.x;
@@ -130,7 +127,6 @@ __global__ void Random_Init(curandState* global_state, int ih) {
 	int x = blockIdx.x * bw + tx;
 	int y = blockIdx.y * bh + ty;
 	unsigned int pixel_index = x + y * ih;
-	curandState s;
 	curand_init(pixel_index, 0, 0, &global_state[pixel_index]);
 }
 extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_width, int pixels) {
@@ -138,12 +134,12 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 	Random_Init << <grid, block, 0 >> > (random_state, image_height);
 
 	//랜덤 초기화
-
 	cudaMalloc((void**)&world, sizeof(hittable*));
 	initWorld << <1, 1 >> > (world, object_counts); cudaDeviceSynchronize();
+
 	//월드 초기화 OBJ 읽기 및 카메라 등
 	Assimp::Importer importer;
-	const aiScene* scene = importer.ReadFile("teapot.obj", aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
+	const aiScene* scene = importer.ReadFile("chair.obj", aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
 	
 	if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) // if is Not Zero
 	{
@@ -171,11 +167,6 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 		}
 	}
 	
-
-
-
-
-
 	//여기까지 OBJ 읽기
 	curandState* objectinit;
 	cudaMalloc(&objectinit, sizeof(curandState));
@@ -188,10 +179,10 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 
 	curandState* bvh_state;
 	cudaMalloc(&bvh_state, sizeof(curandState));
-	makeBVH << <1, 1 >> > (bvh_state, world, object_counts);
+	cudaMalloc((void**)&bvh_list, object_counts * sizeof(bvh_node*));
+	makeBVH << <1, 1 >> > (bvh_state, world, bvh_list, object_counts);
 }
 extern "C" void generatePixel(dim3 grid, dim3 block, int sbytes,
 	unsigned int* g_odata, int imgh, int imgw) {
-
 	CalculatePerPixel << <grid, block, sbytes >> > (world, cam, random_state, g_odata, imgh, imgw);
 }

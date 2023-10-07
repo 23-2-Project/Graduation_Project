@@ -4,7 +4,7 @@
 #include <hittable.h>
 
 __device__ void LoadOBJ(hittable **list,const int v_counts, const int f_counts, const vec3* vertices, double scale, vec3 translate,material* mat) {
-	int i;
+	//int i;
 }
 #endif
 //}
