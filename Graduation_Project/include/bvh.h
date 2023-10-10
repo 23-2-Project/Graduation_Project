@@ -51,7 +51,7 @@ public:
 		}
 		else {
 			// 정렬하는 부분
-			hittable* tmp;
+			/*hittable* tmp;
 			for (int i = 0; i < object_num - 1; ++i) {
 				for (int j = i; j < object_num - 1; ++j) {
 					if (!comparator(objects[j], objects[j + 1])) {
@@ -60,7 +60,26 @@ public:
 						objects[j + 1] = tmp;
 					}
 				}
+			}*/
+
+			//비재귀 머지소트
+			hittable** tmp = (hittable**)malloc(object_num * sizeof(hittable*)); // for merge sort
+
+			for (int len = 1; len < object_num; len <<= 1) {
+				int l = 0;
+				for (int cnt = (len / (object_num << 1)); cnt > 0; cnt--) {
+					int r = l + len;
+					int end = r + len;
+					merge(tmp, l, r, end, object_num);
+					l = end;
+				}
+
+				if ((object_num & ((len << 1) - 1)) > len) {
+					merge(tmp, l, l + len, object_num - 1, object_num);
+				}
 			}
+
+			free(tmp);
 
 			// bvh 트리 생성
 			for (int i = 0; i < object_num; ++i) {
@@ -161,6 +180,18 @@ private:
 
 	__device__ static bool box_z_compare(const hittable* a, const hittable* b) {
 		return box_compare(a, b, 2);
+	}
+
+	__device__ void merge(hittable** arr, int left, int mid, int right, int cnt) {
+		int l = left, r = mid + 1, idx = 0;
+		while (l <= mid && r <= right) {
+			if (box_compare(arr[l], arr[r], 0)) {
+				tmp[idx++] = arr[l++];
+			}
+			else {
+				tmp[idx++] = arr[r++];
+			}
+		}
 	}
 };
 
