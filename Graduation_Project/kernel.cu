@@ -94,8 +94,10 @@ __global__ void addObjects(curandState* global_state, hittable_list** world, int
 	curandState local_rand_state = *global_state;
 	(*world)->add(new sphere(vec3(0, -1000.0, 0), 1000, new lambertian(vec3(0.5, 0.5, 0.5))));
 
-	for (int a = 0; a < 0; a++) {
-		for (int b = 0; b < 0; b++) {
+	int sphere_count = 2;
+
+	for (int a = -sphere_count; a < sphere_count; a++) {
+		for (int b = -sphere_count; b < sphere_count; b++) {
 			float choose_mat = RND;
 			vec3 center(a + RND, 0.2, b + RND);
 			if (choose_mat < 0.8f) {
@@ -138,34 +140,34 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 	initWorld << <1, 1 >> > (world, object_counts); cudaDeviceSynchronize();
 
 	//월드 초기화 OBJ 읽기 및 카메라 등
-	Assimp::Importer importer;
-	const aiScene* scene = importer.ReadFile("chair.obj", aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
-	
-	if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) // if is Not Zero
-	{
-		printf("Read File Exception\n");
-	}
-	for (int i = 0; i < scene->mNumMeshes; i++) {
-		auto mesh = scene->mMeshes[i];
-		for (int j = 0; j < mesh->mNumFaces; j++) {
-			auto Face = mesh->mFaces[j];
-			addTriangle << <1, 1 >> > (world,
-				vec3(mesh->mVertices[Face.mIndices[0]].x, mesh->mVertices[Face.mIndices[0]].y, mesh->mVertices[Face.mIndices[0]].z),
-				vec3(mesh->mVertices[Face.mIndices[1]].x, mesh->mVertices[Face.mIndices[1]].y, mesh->mVertices[Face.mIndices[1]].z),
-				vec3(mesh->mVertices[Face.mIndices[2]].x, mesh->mVertices[Face.mIndices[2]].y, mesh->mVertices[Face.mIndices[2]].z));
-			/*newTriangle(mesh->mVertices[Face.mIndices[0]].x,
-				mesh->mVertices[Face.mIndices[0]].y,
-				mesh->mVertices[Face.mIndices[0]].z,
+	//Assimp::Importer importer;
+	//const aiScene* scene = importer.ReadFile("chair.obj", aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
+	//
+	//if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) // if is Not Zero
+	//{
+	//	printf("Read File Exception\n");
+	//}
+	//for (int i = 0; i < scene->mNumMeshes; i++) {
+	//	auto mesh = scene->mMeshes[i];
+	//	for (int j = 0; j < mesh->mNumFaces; j++) {
+	//		auto Face = mesh->mFaces[j];
+	//		addTriangle << <1, 1 >> > (world,
+	//			vec3(mesh->mVertices[Face.mIndices[0]].x, mesh->mVertices[Face.mIndices[0]].y, mesh->mVertices[Face.mIndices[0]].z),
+	//			vec3(mesh->mVertices[Face.mIndices[1]].x, mesh->mVertices[Face.mIndices[1]].y, mesh->mVertices[Face.mIndices[1]].z),
+	//			vec3(mesh->mVertices[Face.mIndices[2]].x, mesh->mVertices[Face.mIndices[2]].y, mesh->mVertices[Face.mIndices[2]].z));
+	//		/*newTriangle(mesh->mVertices[Face.mIndices[0]].x,
+	//			mesh->mVertices[Face.mIndices[0]].y,
+	//			mesh->mVertices[Face.mIndices[0]].z,
 
-				mesh->mVertices[Face.mIndices[1]].x,
-				mesh->mVertices[Face.mIndices[1]].y,
-				mesh->mVertices[Face.mIndices[1]].z,
+	//			mesh->mVertices[Face.mIndices[1]].x,
+	//			mesh->mVertices[Face.mIndices[1]].y,
+	//			mesh->mVertices[Face.mIndices[1]].z,
 
-				mesh->mVertices[Face.mIndices[2]].x,
-				mesh->mVertices[Face.mIndices[2]].y,
-				mesh->mVertices[Face.mIndices[2]].z);*/
-		}
-	}
+	//			mesh->mVertices[Face.mIndices[2]].x,
+	//			mesh->mVertices[Face.mIndices[2]].y,
+	//			mesh->mVertices[Face.mIndices[2]].z);*/
+	//	}
+	//}
 	
 	//여기까지 OBJ 읽기
 	curandState* objectinit;
