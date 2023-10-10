@@ -93,10 +93,9 @@ __global__ void addObjects(curandState* global_state, hittable_list** world, int
 	curand_init(0, 0, 0, &global_state[0]);
 	curandState local_rand_state = *global_state;
 	(*world)->add(new sphere(vec3(0, -1000.0, 0), 1000, new lambertian(vec3(0.5, 0.5, 0.5))));
-	int scnt = 0; // 구들의 갯수 조정
 
-	for (int a = -scnt; a < scnt; a++) {
-		for (int b = -scnt; b < scnt; b++) {
+	for (int a = 0; a < 0; a++) {
+		for (int b = 0; b < 0; b++) {
 			float choose_mat = RND;
 			vec3 center(a + RND, 0.2, b + RND);
 			if (choose_mat < 0.8f) {
