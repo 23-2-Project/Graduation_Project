@@ -66,10 +66,12 @@ public:
 
 	__device__ aabb bounding_box() const override { return bbox; }
 
+	__device__ bool isLeaf() const override { return true; }
+
 private:
 	vec3 u, v;
 	vec3 normal;
-	double D;
+	float D;
 	vec3 Q;
 	vec3 center;
 	float radius;

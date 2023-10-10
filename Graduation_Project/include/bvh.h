@@ -10,6 +10,10 @@
 
 class bvh_node : public hittable {
 public:
+	hittable* left;
+	hittable* right;
+	aabb bbox;
+
 	__device__ bvh_node() {};
 
 	__device__ bvh_node(hittable_list** world, bvh_node** bvh_list, curandState* state ) {
@@ -95,6 +99,39 @@ public:
 	}
 
 	__device__ bool hit(const ray& r, float t_min, float t_max, hit_record& rec) const override {
+		float tmax = t_max;
+		interval iv = interval(t_min, tmax);
+		if (!bbox.hit(r, iv)) {
+			return false;
+		}
+
+		bool isHit = false;
+		hittable* stk[30];
+		int idx = 0;
+		stk[idx++] = right;
+		stk[idx++] = left;
+
+		while (idx > 0) {
+			hittable* now = stk[--idx];
+			if (now->isLeaf()) {
+				if (now->hit(r, t_min, tmax, rec)) {
+					tmax = rec.t;
+					iv = interval(t_min, tmax);
+					isHit = true;
+				}
+			}
+			else {
+				if (now->bounding_box().hit(r, iv)) {
+					stk[idx++] = ((bvh_node*)now)->right;
+					stk[idx++] = ((bvh_node*)now)->left;
+				}
+			}
+		}
+
+		return isHit;
+	}
+
+	/*__device__ bool hit(const ray& r, float t_min, float t_max, hit_record& rec) const override {
 		interval iv = interval(t_min, t_max);
 		if (!bbox.hit(r, iv))
 			return false;
@@ -103,15 +140,13 @@ public:
 		bool hit_right = right->hit(r, t_min, hit_left ? rec.t : t_max, rec);
 
 		return hit_left || hit_right;
-	}
+	}*/
 
 	__device__ aabb bounding_box() const override { return bbox; }
 
-private:
-	hittable* left;
-	hittable* right;
-	aabb bbox;
+	__device__ bool isLeaf() const override { return false; }
 
+private:
 	__device__ static bool box_compare(const hittable* a, const hittable* b, int axis_index) {
 		return a->bounding_box().axis(axis_index).minv < b->bounding_box().axis(axis_index).minv;
 	}
