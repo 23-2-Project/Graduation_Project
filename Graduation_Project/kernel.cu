@@ -94,7 +94,7 @@ __global__ void addObjects(curandState* global_state, hittable_list** world, int
 	curandState local_rand_state = *global_state;
 	(*world)->add(new sphere(vec3(0, -1000.0, 0), 1000, new lambertian(vec3(0.5, 0.5, 0.5))));
 
-	int sphere_count = 2;
+	int sphere_count = 0;
 
 	for (int a = -sphere_count; a < sphere_count; a++) {
 		for (int b = -sphere_count; b < sphere_count; b++) {
@@ -118,8 +118,8 @@ __global__ void makeBVH(curandState* global_state, hittable_list** world, bvh_no
 	curandState local_rand_state = *global_state;
 	(*world) = new hittable_list((hittable*)new bvh_node(world, bvh_list, &local_rand_state), object_counts);
 }
-__global__ void addTriangle(hittable_list** world,vec3 a,vec3 b,vec3 c) {
-	(*world)->add(new triangle(a, b, c, new lambertian(vec3(0.5f, 0.0f, 0.0f))));
+__global__ void addTriangle(hittable_list** world,vec3 a,vec3 b,vec3 c,vec3 color) {
+	(*world)->add(new triangle(a, b, c, new lambertian(color)));
 }
 __global__ void Random_Init(curandState* global_state, int ih) {
 	int tx = threadIdx.x;
@@ -131,7 +131,48 @@ __global__ void Random_Init(curandState* global_state, int ih) {
 	unsigned int pixel_index = x + y * ih;
 	curand_init(pixel_index, 0, 0, &global_state[pixel_index]);
 }
+
+
+void ReadOBJ(const char* objlist[], int obj_counts,const vec3 translist[],const vec3 scalelist[]) {
+	Assimp::Importer importer;
+	for (int c = 0; c < obj_counts; c++) {
+		char str[100] = "resource/";
+		strcat(str, objlist[c]);
+		printf("%s\n", str);
+		const aiScene* scene = importer.ReadFile(str, aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
+		if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) // if is Not Zero
+		{
+			printf("Read File Exception\n");
+		}
+		vec3 translate = translist[c];
+		vec3 scale = scalelist[c];
+		for (int i = 0; i < scene->mNumMeshes; i++) {
+			auto mesh = scene->mMeshes[i];
+			for (int j = 0; j < mesh->mNumFaces; j++) {
+				auto Face = mesh->mFaces[j];
+				vec3 a(mesh->mVertices[Face.mIndices[0]].x, mesh->mVertices[Face.mIndices[0]].y, mesh->mVertices[Face.mIndices[0]].z);
+				vec3 b(mesh->mVertices[Face.mIndices[1]].x, mesh->mVertices[Face.mIndices[1]].y, mesh->mVertices[Face.mIndices[1]].z);
+				vec3 c(mesh->mVertices[Face.mIndices[2]].x, mesh->mVertices[Face.mIndices[2]].y, mesh->mVertices[Face.mIndices[2]].z);
+				a *= scale;				b *= scale;				c *= scale;
+				a += translate;		b += translate;		c += translate;
+				aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
+				aiColor4D diffuse,specular,ambient;
+				aiGetMaterialColor(material, AI_MATKEY_COLOR_AMBIENT, &ambient);
+				aiGetMaterialColor(material, AI_MATKEY_COLOR_SPECULAR, &specular);
+				aiGetMaterialColor(material, AI_MATKEY_COLOR_DIFFUSE, &diffuse);
+				aiColor4D sum = diffuse + specular + ambient;
+				vec3 color(sum.r, sum.g, sum.b);
+				addTriangle << <1, 1 >> > (world, a, b, c,color);
+			}
+		}
+
+	}
+}
+
+
 extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_width, int pixels) {
+	//cudaDeviceSetLimit(cudaLimitStackSize, 256 * 1024 * 1024);
+	cudaDeviceSetLimit(cudaLimitMallocHeapSize, 256 * 1024 * 1024);
 	cudaMalloc(&random_state, pixels * sizeof(curandState));
 	Random_Init << <grid, block, 0 >> > (random_state, image_height);
 
@@ -140,35 +181,13 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 	initWorld << <1, 1 >> > (world, object_counts); cudaDeviceSynchronize();
 
 	//월드 초기화 OBJ 읽기 및 카메라 등
-	//Assimp::Importer importer;
-	//const aiScene* scene = importer.ReadFile("chair.obj", aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
-	//
-	//if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) // if is Not Zero
-	//{
-	//	printf("Read File Exception\n");
-	//}
-	//for (int i = 0; i < scene->mNumMeshes; i++) {
-	//	auto mesh = scene->mMeshes[i];
-	//	for (int j = 0; j < mesh->mNumFaces; j++) {
-	//		auto Face = mesh->mFaces[j];
-	//		addTriangle << <1, 1 >> > (world,
-	//			vec3(mesh->mVertices[Face.mIndices[0]].x, mesh->mVertices[Face.mIndices[0]].y, mesh->mVertices[Face.mIndices[0]].z),
-	//			vec3(mesh->mVertices[Face.mIndices[1]].x, mesh->mVertices[Face.mIndices[1]].y, mesh->mVertices[Face.mIndices[1]].z),
-	//			vec3(mesh->mVertices[Face.mIndices[2]].x, mesh->mVertices[Face.mIndices[2]].y, mesh->mVertices[Face.mIndices[2]].z));
-	//		/*newTriangle(mesh->mVertices[Face.mIndices[0]].x,
-	//			mesh->mVertices[Face.mIndices[0]].y,
-	//			mesh->mVertices[Face.mIndices[0]].z,
+	const char* objlist[] = { "Chair.obj","head.obj"}; //읽을 OBJ 리스트, 및의 배열들과 순서 맞춰야함
+	const vec3 translist[] = { vec3(0.0f,0.0f,0.0f), 
+										vec3(10.0f,10.0f,0.0f)}; //위에서 읽을 OBJ를 옮겨주는 벡터
+	const vec3 scalelist[] = { vec3(1.0f,1.0f,1.0f),
+										vec3(5.0f,5.0f,5.0f) }; //위에서 읽을 OBJ의 크기를 바꿔주는 벡터
 
-	//			mesh->mVertices[Face.mIndices[1]].x,
-	//			mesh->mVertices[Face.mIndices[1]].y,
-	//			mesh->mVertices[Face.mIndices[1]].z,
-
-	//			mesh->mVertices[Face.mIndices[2]].x,
-	//			mesh->mVertices[Face.mIndices[2]].y,
-	//			mesh->mVertices[Face.mIndices[2]].z);*/
-	//	}
-	//}
-	
+	ReadOBJ(objlist, 2,translist,scalelist);
 	//여기까지 OBJ 읽기
 	curandState* objectinit;
 	cudaMalloc(&objectinit, sizeof(curandState));
