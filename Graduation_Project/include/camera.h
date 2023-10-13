@@ -13,7 +13,8 @@ class camera {
       int    samples_per_pixel = 10;
       vec3 lookat = vec3(0, 0, 0);
       vec3 lookfrom = vec3(0, 0, -1);
-    __device__ camera(float ar,int iw,int spp,int md,int vf,vec3 lf,vec3 la,vec3 vu) {
+      vec3 background = vec3(0.0f, 0.0f, 0.0f);
+    __device__ camera(float ar,int iw,int spp,int md,int vf,vec3 lf,vec3 la,vec3 vu,vec3 bg) {
         aspect_ratio = ar;
         image_width = iw;
         samples_per_pixel = spp;
@@ -22,6 +23,7 @@ class camera {
         lookfrom = lf;
         lookat = la;
         vup = vu;
+        background = bg;
         update();
     }
 
@@ -57,26 +59,22 @@ class camera {
         for (int i = 0; i < depth; i++) {
             hit_record rec;
             //if(false){
-            if ((*world)->hit(cur_ray, 0.001f, FLT_MAX, rec)) {
-                ray scattered;
-                vec3 attenuation;
-                if (rec.mat->scatter(cur_ray, rec, attenuation, scattered, state)) {
-                    cur_ray = scattered;
-                    cur_attenuation *= attenuation;
-                }
-                else {
-                    return vec3(0.0, 0.0, 0.0);
-                }
+            if (!(*world)->hit(cur_ray, 0.001f, FLT_MAX, rec)) {
+                return background;
             }
-            else {
-                vec3 unit_direction = unit_vector(cur_ray.direction());
-                float t = 0.5f * (unit_direction.y() + 1.0f);
-                vec3 c = (1.0f - t) * vec3(1.0, 1.0, 1.0) + t * vec3(0.5, 0.7, 1.0);
-                return cur_attenuation * c;
+            ray scattered;
+            vec3 attenuation;
+            vec3 color_from_emission = rec.mat->emitted();
+            if (!rec.mat->scatter(cur_ray, rec, attenuation, scattered, state)) {
+                return cur_attenuation*color_from_emission;
             }
-
+            cur_ray = scattered;
+            cur_attenuation *= attenuation;
+            cur_attenuation += color_from_emission;
         }
         return vec3(0.0, 0.0, 0.0);
+
+
     }
     __device__ void changevfov(int x) {
         vfov = max(15, min((int) 150, (int)vfov + x));

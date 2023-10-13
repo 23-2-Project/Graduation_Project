@@ -42,7 +42,26 @@ static __device__ bool refract(const vec3& v, const vec3& n, float ni_over_nt, v
 
 class material {
 public:
+	__device__ virtual vec3 emitted() const {
+		return vec3(0.0f, 0.0f, 0.0f);
+	}
 	__device__ virtual bool scatter(const ray& r_in, const hit_record& rec, vec3& attenuation, ray& scattered, curandState* local_rand_state) const = 0;
+};
+
+class light : public material {
+public:
+	__device__ light(vec3 a) :emit(a) {}
+
+	__device__ bool scatter(const ray& r_in, const hit_record& rec, vec3& attenuation, ray& scattered, curandState* local_rand_state) const override {
+		return false;
+	}
+
+	__device__ vec3 emitted() const override {
+		return emit;
+	}
+
+private:
+	vec3 emit;
 };
 
 class lambertian : public material {

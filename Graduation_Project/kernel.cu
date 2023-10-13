@@ -83,7 +83,8 @@ __global__ void initCamera(camera** ca) {
 		90,  //시야각
 		vec3(-20, 0, 0), //카메라 위치 
 		vec3(0, 0, -1), //바라보는곳
-		vec3(0, 1, 0)); //업벡터
+		vec3(0, 1, 0),//업벡터
+		vec3(0.0f,0.0f,0)); //배경색
 }
 __global__ void initWorld(hittable_list** world, int object_counts) {
 	(*world) = new hittable_list(object_counts);
@@ -93,7 +94,7 @@ __global__ void addObjects(curandState* global_state, hittable_list** world, int
 	curand_init(0, 0, 0, &global_state[0]);
 	curandState local_rand_state = *global_state;
 	(*world)->add(new sphere(vec3(0, -1000.0, 0), 1000, new lambertian(vec3(0.5, 0.5, 0.5))));
-
+	(*world)->add(new sphere(vec3(0, 200, 0), 100, new light(vec3(1, 1, 1))));
 	int sphere_count = 0;
 
 	for (int a = -sphere_count; a < sphere_count; a++) {
@@ -162,6 +163,7 @@ void ReadOBJ(const char* objlist[], int obj_counts,const vec3 translist[],const 
 				aiGetMaterialColor(material, AI_MATKEY_COLOR_DIFFUSE, &diffuse);
 				aiColor4D sum = diffuse + specular + ambient;
 				vec3 color(sum.r, sum.g, sum.b);
+				color = vec3(1.0f, 0.0f, 0.0f);
 				addTriangle << <1, 1 >> > (world, a, b, c,color);
 			}
 		}
@@ -181,7 +183,7 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 	initWorld << <1, 1 >> > (world, object_counts); cudaDeviceSynchronize();
 
 	//월드 초기화 OBJ 읽기 및 카메라 등
-	const char* objlist[] = { "Chair.obj","head.obj"}; //읽을 OBJ 리스트, 및의 배열들과 순서 맞춰야함
+	const char* objlist[] = { "teapot.obj","buff-doge.obj"}; //읽을 OBJ 리스트, 및의 배열들과 순서 맞춰야함
 	const vec3 translist[] = { vec3(0.0f,0.0f,0.0f), 
 										vec3(10.0f,10.0f,0.0f)}; //위에서 읽을 OBJ를 옮겨주는 벡터
 	const vec3 scalelist[] = { vec3(1.0f,1.0f,1.0f),
