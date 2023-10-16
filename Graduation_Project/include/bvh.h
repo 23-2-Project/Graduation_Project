@@ -17,7 +17,7 @@ public:
 
 	__device__ bvh_node() {};
 
-	__device__ bvh_node(hittable_list** world, bvh_node** bvh_list, curandState* state ) {
+	__device__ bvh_node(hittable_list** world, bvh_node** bvh_list, curandState* state) {
 		hittable** objects = (*world)->list;
 		int object_num = (*world)->now_size;
 
@@ -25,11 +25,6 @@ public:
 		while (true) {
 			if ((startIdx >> 1) > object_num) { startIdx >>= 1; }
 			else { break; }
-		}
-
-		bvh_list = (bvh_node**)malloc((startIdx << 1) * sizeof(bvh_node*));
-		for (int i = 0; i < (startIdx << 1); ++i) {
-			bvh_list[i] = new bvh_node();
 		}
 
 		int axis = random_int(state, 0, 2);
@@ -56,37 +51,37 @@ public:
 			for (int i = 0; i < object_num - 1; ++i) {
 				for (int j = i; j < object_num - 1; ++j) {
 					if (!comparator(objects[j], objects[j + 1])) {
-						tmp = objects[j];
+						auto tmp = objects[j];
 						objects[j] = objects[j + 1];
 						objects[j + 1] = tmp;
 					}
 				}
 			}*/
 
-			tmp = (hittable**)malloc(object_num * sizeof(hittable*)); // for merge sort
+			//tmp = (hittable**)malloc(object_num * sizeof(hittable*)); // for merge sort
 
-			for (int len = 1; len < object_num; len <<= 1) {
-				int l = 0;
-				for (int cnt = (len / (object_num << 1)); cnt > 0; cnt--) {
-					int r = l + len;
-					int end = r + len;
-					merge(objects, l, r, end, object_num);
-					l = end;
-				}
+			//for (int len = 1; len < object_num; len <<= 1) {
+			//	int l = 0;
+			//	for (int cnt = (len / (object_num << 1)); cnt > 0; cnt--) {
+			//		int r = l + len;
+			//		int end = r + len;
+			//		merge(objects, l, r, end, object_num);
+			//		l = end;
+			//	}
 
-				if ((object_num & ((len << 1) - 1)) > len) {
-					merge(objects, l, l + len, object_num - 1, object_num);
-				}
-			}
+			//	if ((object_num & ((len << 1) - 1)) > len) {
+			//		merge(objects, l, l + len, object_num - 1, object_num);
+			//	}
+			//}
 
-			free(tmp);
+			//free(tmp);
 
 			// bvh 트리 생성
 			for (int i = 0; i < object_num; ++i) {
 				int parent = (i + startIdx) / 2;
 				if (i % 2 == 0) { bvh_list[parent]->left = objects[i]; }
-				else { 
-					bvh_list[parent]->right = objects[i]; 
+				else {
+					bvh_list[parent]->right = objects[i];
 					bvh_list[parent]->bbox = aabb(bvh_list[parent]->left->bounding_box(), bvh_list[parent]->right->bounding_box());
 				}
 			}
@@ -100,7 +95,7 @@ public:
 					}
 					else {
 						bvh_list[i / 2]->bbox = aabb();
-					}				
+					}
 				}
 			}
 
@@ -165,7 +160,6 @@ public:
 
 	__device__ bool isLeaf() const override { return false; }
 
-private:
 	__device__ static bool box_compare(const hittable* a, const hittable* b, int axis_index) {
 		return a->bounding_box().axis(axis_index).minv < b->bounding_box().axis(axis_index).minv;
 	}
@@ -182,6 +176,7 @@ private:
 		return box_compare(a, b, 2);
 	}
 
+private:
 	__device__ void merge(hittable** arr, int left, int mid, int right, int cnt) {
 		int l = left, r = mid + 1, idx = 0;
 		while (l <= mid && r <= right) {
@@ -194,5 +189,34 @@ private:
 		}
 	}
 };
+
+__global__ void object_swap(hittable_list** world, int object_counts, int odd_even, int axis) {
+	int idx = (blockIdx.x * blockDim.x + threadIdx.x) * 2 + odd_even;
+	if (idx >= object_counts - 1) { return; }
+
+	hittable** objects = (*world)->list;
+	auto comparator = (axis == 0) ? bvh_node::box_x_compare
+		: (axis == 1) ? bvh_node::box_y_compare
+		: bvh_node::box_z_compare;
+
+	if (!comparator(objects[idx], objects[idx + 1])) {
+		hittable* tmp = objects[idx];
+		objects[idx] = objects[idx + 1];
+		objects[idx + 1] = tmp;
+	}
+	return;
+}
+
+__global__ void add_bvh_node(bvh_node** bvh_list, int maxSize) {
+	int idx = blockIdx.x * blockDim.x + threadIdx.x;
+	if (idx >= maxSize) { return; }
+	bvh_list[idx] = new bvh_node();
+}
+
+__global__ void make_bvh_tree(curandState* global_state, hittable_list** world, bvh_node** bvh_list, int object_count) {
+	curand_init(0, 0, 0, &global_state[0]);
+	curandState local_rand_state = *global_state;
+	(*world) = new hittable_list((hittable*)new bvh_node(world, bvh_list, &local_rand_state), object_count);
+}
 
 #endif

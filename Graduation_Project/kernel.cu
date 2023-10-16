@@ -52,6 +52,48 @@ extern "C" void RotateCamera(int x, int y) {
 extern "C" void manivfov(int x) {
 	ManipulateVFOV << <1, 1 >> > (cam, x);
 }
+extern "C" void constructBVH() {
+	// object 개수 구하기
+	int object_count;
+	int* kernel_value;
+	cudaMalloc((void**)&kernel_value, sizeof(int));
+	get_object_count << <1, 1 >> > (world, kernel_value);
+	cudaMemcpy(&object_count, kernel_value, sizeof(int), cudaMemcpyDeviceToHost);
+	cudaFree(kernel_value);
+	printf("%d개\n", object_count);
+	
+	// 정렬
+	srand(time(NULL));
+	int axis = rand() % 3;
+	dim3 sortBlock(512, 1, 1);
+	dim3 sortGrid(object_count / sortBlock.x + 1, 1, 1);
+	for (int i = 0; i < object_count; ++i) {
+		int odd_even = i % 2;
+		object_swap << <sortGrid, sortBlock>> > (world, object_count, odd_even, 0);
+		cudaDeviceSynchronize();
+	}
+	printf("정렬 완료\n");
+
+	// 할당
+	int startIdx = 1 << 30;
+	while (true) {
+		if ((startIdx >> 1) > object_count) { startIdx >>= 1; }
+		else { break; }
+	}
+
+	cudaMalloc((void**)&bvh_list, (startIdx * 2) * sizeof(bvh_node*));
+	dim3 bvhBlock(512, 1, 1);
+	dim3 bvhGrid(startIdx * 2 / bvhBlock.x + 1, 1, 1);
+	add_bvh_node << <bvhGrid, bvhBlock>> > (bvh_list, startIdx * 2);
+	printf("할당 완료\n");
+
+
+	//bvh 생성
+	curandState* bvh_state;
+	cudaMalloc(&bvh_state, sizeof(curandState));
+	make_bvh_tree << <1, 1 >> > (bvh_state, world, bvh_list, object_count);
+	printf("bvh 생성 완료\n");
+}
 
 __global__ void CalculatePerPixel(hittable_list** world, camera** camera, curandState* global_rand_state, unsigned int* g_odata, int imgh, int imgw) {
 	int tx = threadIdx.x;
@@ -94,10 +136,8 @@ __global__ void addObjects(curandState* global_state, hittable_list** world, int
 	curandState local_rand_state = *global_state;
 	(*world)->add(new sphere(vec3(0, -1000.0, 0), 1000, new lambertian(vec3(0.5, 0.5, 0.5))));
 
-	int sphere_count = 2;
-
-	for (int a = -sphere_count; a < sphere_count; a++) {
-		for (int b = -sphere_count; b < sphere_count; b++) {
+	for (int a = 0; a < 0; a++) {
+		for (int b = -10; b < 10; b++) {
 			float choose_mat = RND;
 			vec3 center(a + RND, 0.2, b + RND);
 			if (choose_mat < 0.8f) {
@@ -112,12 +152,7 @@ __global__ void addObjects(curandState* global_state, hittable_list** world, int
 		}
 	}
 }
-__global__ void makeBVH(curandState* global_state, hittable_list** world, bvh_node** bvh_list, int object_counts) {
-	printf("%d개\n", (*world)->now_size);
-	curand_init(0, 0, 0, &global_state[0]);
-	curandState local_rand_state = *global_state;
-	(*world) = new hittable_list((hittable*)new bvh_node(world, bvh_list, &local_rand_state), object_counts);
-}
+
 __global__ void addTriangle(hittable_list** world,vec3 a,vec3 b,vec3 c) {
 	(*world)->add(new triangle(a, b, c, new lambertian(vec3(0.5f, 0.0f, 0.0f))));
 }
@@ -140,34 +175,34 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 	initWorld << <1, 1 >> > (world, object_counts); cudaDeviceSynchronize();
 
 	//월드 초기화 OBJ 읽기 및 카메라 등
-	//Assimp::Importer importer;
-	//const aiScene* scene = importer.ReadFile("chair.obj", aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
-	//
-	//if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) // if is Not Zero
-	//{
-	//	printf("Read File Exception\n");
-	//}
-	//for (int i = 0; i < scene->mNumMeshes; i++) {
-	//	auto mesh = scene->mMeshes[i];
-	//	for (int j = 0; j < mesh->mNumFaces; j++) {
-	//		auto Face = mesh->mFaces[j];
-	//		addTriangle << <1, 1 >> > (world,
-	//			vec3(mesh->mVertices[Face.mIndices[0]].x, mesh->mVertices[Face.mIndices[0]].y, mesh->mVertices[Face.mIndices[0]].z),
-	//			vec3(mesh->mVertices[Face.mIndices[1]].x, mesh->mVertices[Face.mIndices[1]].y, mesh->mVertices[Face.mIndices[1]].z),
-	//			vec3(mesh->mVertices[Face.mIndices[2]].x, mesh->mVertices[Face.mIndices[2]].y, mesh->mVertices[Face.mIndices[2]].z));
-	//		/*newTriangle(mesh->mVertices[Face.mIndices[0]].x,
-	//			mesh->mVertices[Face.mIndices[0]].y,
-	//			mesh->mVertices[Face.mIndices[0]].z,
+	Assimp::Importer importer;
+	const aiScene* scene = importer.ReadFile("chair.obj", aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
+	
+	if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) // if is Not Zero
+	{
+		printf("Read File Exception\n");
+	}
+	for (int i = 0; i < scene->mNumMeshes; i++) {
+		auto mesh = scene->mMeshes[i];
+		for (int j = 0; j < mesh->mNumFaces; j++) {
+			auto Face = mesh->mFaces[j];
+			addTriangle << <1, 1 >> > (world,
+				vec3(mesh->mVertices[Face.mIndices[0]].x, mesh->mVertices[Face.mIndices[0]].y, mesh->mVertices[Face.mIndices[0]].z),
+				vec3(mesh->mVertices[Face.mIndices[1]].x, mesh->mVertices[Face.mIndices[1]].y, mesh->mVertices[Face.mIndices[1]].z),
+				vec3(mesh->mVertices[Face.mIndices[2]].x, mesh->mVertices[Face.mIndices[2]].y, mesh->mVertices[Face.mIndices[2]].z));
+			/*newTriangle(mesh->mVertices[Face.mIndices[0]].x,
+				mesh->mVertices[Face.mIndices[0]].y,
+				mesh->mVertices[Face.mIndices[0]].z,
 
-	//			mesh->mVertices[Face.mIndices[1]].x,
-	//			mesh->mVertices[Face.mIndices[1]].y,
-	//			mesh->mVertices[Face.mIndices[1]].z,
+				mesh->mVertices[Face.mIndices[1]].x,
+				mesh->mVertices[Face.mIndices[1]].y,
+				mesh->mVertices[Face.mIndices[1]].z,
 
-	//			mesh->mVertices[Face.mIndices[2]].x,
-	//			mesh->mVertices[Face.mIndices[2]].y,
-	//			mesh->mVertices[Face.mIndices[2]].z);*/
-	//	}
-	//}
+				mesh->mVertices[Face.mIndices[2]].x,
+				mesh->mVertices[Face.mIndices[2]].y,
+				mesh->mVertices[Face.mIndices[2]].z);*/
+		}
+	}
 	
 	//여기까지 OBJ 읽기
 	curandState* objectinit;
@@ -179,10 +214,7 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 	cudaDeviceSynchronize();//쿠다커널이 종료될때까지 기다리는 함수. 위의 world에 오브젝트 다 담길때까지 기다리는 거임. 
 	//그래야 BVH할수있으니까. BVH하다가 오브젝트 담기면 안됌.
 
-	curandState* bvh_state;
-	cudaMalloc(&bvh_state, sizeof(curandState));
-	cudaMalloc((void**)&bvh_list, object_counts * sizeof(bvh_node*));
-	makeBVH << <1, 1 >> > (bvh_state, world, bvh_list, object_counts);
+	constructBVH();
 }
 extern "C" void generatePixel(dim3 grid, dim3 block, int sbytes,
 	unsigned int* g_odata, int imgh, int imgw) {

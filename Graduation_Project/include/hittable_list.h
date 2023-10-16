@@ -45,4 +45,8 @@ public:
 	__device__ bool isLeaf() const override { return true; }
 };
 
+__global__ void get_object_count(hittable_list** world, int* count) {
+	*count = (*world)->now_size;
+}
+
 #endif
