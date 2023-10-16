@@ -69,7 +69,7 @@ extern "C" void constructBVH() {
 	dim3 sortGrid(object_count / sortBlock.x + 1, 1, 1);
 	for (int i = 0; i < object_count; ++i) {
 		int odd_even = i % 2;
-		object_swap << <sortGrid, sortBlock>> > (world, object_count, odd_even, 0);
+		object_swap << <sortGrid, sortBlock>> > (world, object_count, odd_even, axis);
 		cudaDeviceSynchronize();
 	}
 	printf("정렬 완료\n");
@@ -82,16 +82,18 @@ extern "C" void constructBVH() {
 	}
 
 	cudaMalloc((void**)&bvh_list, (startIdx * 2) * sizeof(bvh_node*));
+	cudaDeviceSynchronize();
 	dim3 bvhBlock(512, 1, 1);
 	dim3 bvhGrid(startIdx * 2 / bvhBlock.x + 1, 1, 1);
 	add_bvh_node << <bvhGrid, bvhBlock>> > (bvh_list, startIdx * 2);
+	cudaDeviceSynchronize();
 	printf("할당 완료\n");
-
 
 	//bvh 생성
 	curandState* bvh_state;
 	cudaMalloc(&bvh_state, sizeof(curandState));
 	make_bvh_tree << <1, 1 >> > (bvh_state, world, bvh_list, object_count);
+	cudaDeviceSynchronize();
 	printf("bvh 생성 완료\n");
 }
 
