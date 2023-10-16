@@ -1,11 +1,13 @@
 #ifndef INTERVAL_H
 #define INTERVAL_H
 
+constexpr float inf = FLT_MAX;
+
 class interval {
 public:
 	float minv, maxv;
 
-	__device__ interval() : minv(+infinity), maxv(-infinity) {} // Default interval is empty
+	__device__ interval() : minv(+inf), maxv(-inf) {} // Default interval is empty
 
 	__device__ interval(float _min, float _max) : minv(_min), maxv(_max) {}
 
@@ -20,12 +22,12 @@ public:
 		return interval(minv - padding, maxv + padding);
 	}
 
-	__device__ bool contains(float x) const {
+	__device__ inline bool contains(float x) const {
 		return minv <= x && x <= maxv;
 	}
 
-	__device__ bool surrounds(float x) const {
-		return minv < x&& x < maxv;
+	__device__ inline bool surrounds(float x) const {
+		return minv < x && x < maxv;
 	}
 
 	__device__ float clamp(float x) const {
@@ -36,8 +38,8 @@ public:
 	static const interval empty, universe;
 };
 
-const static interval empty(+infinity, -infinity);
-const static interval universe(-infinity, +infinity);
+const static interval empty(+inf, -inf);
+const static interval universe(-inf, +inf);
 
 __device__ interval operator+(const interval& ival, float displacement) {
 	return interval(ival.minv + displacement, ival.maxv + displacement);

@@ -15,7 +15,7 @@ public:
 	hittable** tmp; // 머지소트용 배열
 	aabb bbox;
 
-	__device__ bvh_node() {};
+	__device__ bvh_node(): left(nullptr), right(nullptr), tmp(nullptr) {};
 
 	__device__ bvh_node(hittable_list** world, bvh_node** bvh_list, curandState* state ) {
 		hittable** objects = (*world)->list;
@@ -51,19 +51,8 @@ public:
 			}
 		}
 		else {
-			// 정렬하는 부분
-			/*hittable* tmp;
-			for (int i = 0; i < object_num - 1; ++i) {
-				for (int j = i; j < object_num - 1; ++j) {
-					if (!comparator(objects[j], objects[j + 1])) {
-						tmp = objects[j];
-						objects[j] = objects[j + 1];
-						objects[j + 1] = tmp;
-					}
-				}
-			}*/
-
-			tmp = (hittable**)malloc(object_num * sizeof(hittable*)); // for merge sort
+			// Iterative Merge Sort
+			tmp = (hittable**)malloc(object_num * sizeof(hittable*));
 
 			for (int len = 1; len < object_num; len <<= 1) {
 				int l = 0;
@@ -84,7 +73,7 @@ public:
 			// bvh 트리 생성
 			for (int i = 0; i < object_num; ++i) {
 				int parent = (i + startIdx) / 2;
-				if (i % 2 == 0) { bvh_list[parent]->left = objects[i]; }
+				if (~i & 1) { bvh_list[parent]->left = objects[i]; }
 				else { 
 					bvh_list[parent]->right = objects[i]; 
 					bvh_list[parent]->bbox = aabb(bvh_list[parent]->left->bounding_box(), bvh_list[parent]->right->bounding_box());
@@ -92,7 +81,7 @@ public:
 			}
 
 			for (int i = object_num + startIdx; i < startIdx * 2; ++i) {
-				if (i % 2 == 0) { bvh_list[i / 2]->left = bvh_list[i]; }
+				if (~i & 1) { bvh_list[i / 2]->left = bvh_list[i]; }
 				else {
 					bvh_list[i / 2]->right = bvh_list[i];
 					if (i == object_num + startIdx) {
@@ -117,15 +106,14 @@ public:
 		bbox = aabb(left->bounding_box(), right->bounding_box());
 	}
 
-	__device__ bool hit(const ray& r, float t_min, float t_max, hit_record& rec) const override {
-		float tmax = t_max;
-		interval iv = interval(t_min, tmax);
-		if (!bbox.hit(r, iv)) {
+	__device__ bool hit(const ray& r, interval ray_t, hit_record& rec) const override {
+		float tmax = ray_t.maxv;
+		if (!bbox.hit(r, ray_t)) {
 			return false;
 		}
 
 		bool isHit = false;
-		hittable* stk[30];
+		hittable* stk[32];
 		int idx = 0;
 		stk[idx++] = right;
 		stk[idx++] = left;
@@ -133,36 +121,22 @@ public:
 		while (idx > 0) {
 			hittable* now = stk[--idx];
 			if (now->isLeaf()) {
-				if (now->hit(r, t_min, tmax, rec)) {
+				if (now->hit(r, interval(ray_t.minv, tmax), rec)) {
 					tmax = rec.t;
-					iv = interval(t_min, tmax);
 					isHit = true;
 				}
 			}
 			else {
-				if (now->bounding_box().hit(r, iv)) {
+				if (now->bounding_box().hit(r, ray_t)) {
 					stk[idx++] = ((bvh_node*)now)->right;
 					stk[idx++] = ((bvh_node*)now)->left;
 				}
 			}
 		}
-
 		return isHit;
 	}
 
-	/*__device__ bool hit(const ray& r, float t_min, float t_max, hit_record& rec) const override {
-		interval iv = interval(t_min, t_max);
-		if (!bbox.hit(r, iv))
-			return false;
-
-		bool hit_left = left->hit(r, t_min, t_max, rec);
-		bool hit_right = right->hit(r, t_min, hit_left ? rec.t : t_max, rec);
-
-		return hit_left || hit_right;
-	}*/
-
 	__device__ aabb bounding_box() const override { return bbox; }
-
 	__device__ bool isLeaf() const override { return false; }
 
 private:
@@ -191,6 +165,11 @@ private:
 			else {
 				tmp[idx++] = arr[r++];
 			}
+		}
+		while(l <= mid) { tmp[idx++] = arr[l++]; }
+		while(r <= right) { tmp[idx++] = arr[r++]; }
+		for (int i = left; i <= right; ++i) {
+			arr[i] = tmp[i - left];
 		}
 	}
 };

@@ -56,7 +56,6 @@ public:
 				t1 = tmp;
 			}
 
-
 			if (t0 > ray_t.minv) ray_t.minv = t0;
 			if (t1 < ray_t.maxv) ray_t.maxv = t1;
 

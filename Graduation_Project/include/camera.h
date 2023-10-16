@@ -59,7 +59,7 @@ class camera {
         for (int i = 0; i < depth; i++) {
             hit_record rec;
             //if(false){
-            if (!(*world)->hit(cur_ray, 0.001f, FLT_MAX, rec)) {
+            if (!(*world)->hit(cur_ray, interval(0.001f, FLT_MAX), rec)) {
                 return background;
             }
             ray scattered;

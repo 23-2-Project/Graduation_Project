@@ -77,14 +77,14 @@ __global__ void CalculatePerPixel(hittable_list** world, camera** camera, curand
 }
 __global__ void initCamera(camera** ca) {
 	*ca = new camera(16.0 / 9.0, //종횡비
-		1600, //이미지 가로길이
-		1,  //픽셀당 샘플수
-		50,  //반사 횟수
-		90,  //시야각
-		vec3(-20, 0, 0), //카메라 위치 
-		vec3(0, 0, -1), //바라보는곳
-		vec3(0, 1, 0),//업벡터
-		vec3(0.0f,0.0f,0)); //배경색
+		1600,                    //이미지 가로길이
+		1,                       //픽셀당 샘플수
+		50,                      //반사 횟수
+		90,                      //시야각
+		vec3(-20, 0, 0),         //카메라 위치 
+		vec3(0, 0, -1),          //바라보는곳
+		vec3(0, 1, 0),           //업벡터
+		vec3(0.0f,0.0f,0));      //배경색
 }
 __global__ void initWorld(hittable_list** world, int object_counts) {
 	(*world) = new hittable_list(object_counts);
@@ -133,7 +133,6 @@ __global__ void Random_Init(curandState* global_state, int ih) {
 	curand_init(pixel_index, 0, 0, &global_state[pixel_index]);
 }
 
-
 void ReadOBJ(const char* objlist[], int obj_counts,const vec3 translist[],const vec3 scalelist[]) {
 	Assimp::Importer importer;
 	for (int c = 0; c < obj_counts; c++) {
@@ -171,7 +170,6 @@ void ReadOBJ(const char* objlist[], int obj_counts,const vec3 translist[],const 
 	}
 }
 
-
 extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_width, int pixels) {
 	//cudaDeviceSetLimit(cudaLimitStackSize, 256 * 1024 * 1024);
 	cudaDeviceSetLimit(cudaLimitMallocHeapSize, 256 * 1024 * 1024);
@@ -183,12 +181,11 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 	initWorld << <1, 1 >> > (world, object_counts); cudaDeviceSynchronize();
 
 	//월드 초기화 OBJ 읽기 및 카메라 등
-	const char* objlist[] = { "teapot.obj","buff-doge.obj"}; //읽을 OBJ 리스트, 및의 배열들과 순서 맞춰야함
+	const char* objlist[] = { "teapot.obj","buff-doge.obj"};      //읽을 OBJ 리스트, 및의 배열들과 순서 맞춰야함
 	const vec3 translist[] = { vec3(0.0f,0.0f,0.0f), 
-										vec3(10.0f,10.0f,0.0f)}; //위에서 읽을 OBJ를 옮겨주는 벡터
+										vec3(10.0f,10.0f,0.0f)};  //위에서 읽을 OBJ를 옮겨주는 벡터
 	const vec3 scalelist[] = { vec3(1.0f,1.0f,1.0f),
-										vec3(5.0f,5.0f,5.0f) }; //위에서 읽을 OBJ의 크기를 바꿔주는 벡터
-
+										vec3(5.0f,5.0f,5.0f) };   //위에서 읽을 OBJ의 크기를 바꿔주는 벡터
 	ReadOBJ(objlist, 2,translist,scalelist);
 	//여기까지 OBJ 읽기
 	curandState* objectinit;
@@ -197,8 +194,8 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 	cudaMalloc(&cam, sizeof(camera*));
 	initCamera << <1, 1 >> > (cam);
 
-	cudaDeviceSynchronize();//쿠다커널이 종료될때까지 기다리는 함수. 위의 world에 오브젝트 다 담길때까지 기다리는 거임. 
-	//그래야 BVH할수있으니까. BVH하다가 오브젝트 담기면 안됌.
+	cudaDeviceSynchronize();        //쿠다커널이 종료될때까지 기다리는 함수. 위의 world에 오브젝트 다 담길때까지 기다림.
+	                                //BVH 생성 중 오브젝트 담기는 것 방지용
 
 	curandState* bvh_state;
 	cudaMalloc(&bvh_state, sizeof(curandState));

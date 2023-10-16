@@ -82,11 +82,8 @@ void generateImage() {
 
     glBindBuffer(GL_PIXEL_PACK_BUFFER_ARB, 0);
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER_ARB, 0);
-
-
-
-
 }
+
 void displayImage(GLuint texture) {
     glBindTexture(GL_TEXTURE_2D, texture);
     glEnable(GL_TEXTURE_2D);
