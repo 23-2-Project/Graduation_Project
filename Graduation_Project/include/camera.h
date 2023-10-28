@@ -29,7 +29,7 @@ class camera {
 
     __device__ ray get_ray(curandState* state,int i, int j) {
         auto pixel_center = pixel00_loc + (i * pixel_delta_u) + (j * pixel_delta_v);
-        pixel_center += pixel_delta_u * (random_double(state) - 0.5) + pixel_delta_v * (random_double(state) - 0.5);//ÇÈ¼¿ ³» ÀÓÀÇÀÇ Á¡
+        pixel_center += pixel_delta_u * (random_float(state) - 0.5) + pixel_delta_v * (random_float(state) - 0.5);//ÇÈ¼¿ ³» ÀÓÀÇÀÇ Á¡
 
         return ray(center, pixel_center- center);//·»Áî Ã³¸®ÇÏ·Á¸é center ¹Ù²ã¾ßÇÔ
     }
@@ -60,7 +60,7 @@ class camera {
             hit_record rec;
             //if(false){
             if (!(*world)->hit(cur_ray, interval(0.001f, FLT_MAX), rec)) {
-                return background;
+                return cur_attenuation*background;
             }
             ray scattered;
             vec3 attenuation;
@@ -92,7 +92,7 @@ class camera {
         auto theta = degrees_to_radians(vfov);
         auto h = tan(theta / 2);
         auto viewport_height = 2 * h * focal_length;
-        auto viewport_width = viewport_height * (static_cast<double>(image_width) / image_height);
+        auto viewport_width = viewport_height * (static_cast<float>(image_width) / image_height);
 
         // Calculate the u,v,w unit basis vectors for the camera coordinate frame.
         w = unit_vector(lookat - lookfrom);
@@ -116,10 +116,10 @@ class camera {
     }
 private:
     vec3* movdir = new vec3[4];
-    double aspect_ratio = 1.0;  
+    float aspect_ratio = 1.0;  
     int    image_width = 100;  
 
-    double vfov = 90;              
+    float vfov = 90;              
     vec3   vup = vec3(0, 1, 0);     
 
     int    image_height;  

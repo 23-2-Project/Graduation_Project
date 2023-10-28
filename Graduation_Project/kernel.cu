@@ -24,8 +24,8 @@ int object_counts = 80000;
 curandState* random_state;
 
 // convert floating point rgb color to 8-bit integer
-__device__ float clamp(double x, double a, double b) { return max(a, min(b, x)); }
-__device__ int rgbToInt(double r, double g, double b) {
+__device__ float clamp(float x, float a, float b) { return max(a, min(b, x)); }
+__device__ int rgbToInt(float r, float g, float b) {
 	r = clamp(r, 0.0f, 255.0f);
 	g = clamp(g, 0.0f, 255.0f);
 	b = clamp(b, 0.0f, 255.0f);
@@ -67,11 +67,12 @@ __global__ void CalculatePerPixel(hittable_list** world, camera** camera, curand
 
 	int depth = (*camera)->max_depth;
 	int spp = (*camera)->samples_per_pixel;
+	float rate = 1 / float(spp);
 	ray r = (*camera)->get_ray(&local_rand_state, i, j);
 	for (int i = 0; i < spp; i++) {
 		color += (*camera)->ray_color(&local_rand_state, r, depth, world);
 	}
-	color /= float(spp);
+	color *= rate;
 	global_rand_state[index] = local_rand_state;
 	g_odata[i + j * imgw] = vectorgb(color);
 }
@@ -84,7 +85,7 @@ __global__ void initCamera(camera** ca) {
 		vec3(-20, 0, 0),         //카메라 위치 
 		vec3(0, 0, -1),          //바라보는곳
 		vec3(0, 1, 0),           //업벡터
-		vec3(0.0f,0.0f,0));      //배경색
+		vec3(0.5f,0.7f,1));      //배경색
 }
 __global__ void initWorld(hittable_list** world, int object_counts) {
 	(*world) = new hittable_list(object_counts);
@@ -95,7 +96,7 @@ __global__ void addObjects(curandState* global_state, hittable_list** world, int
 	curandState local_rand_state = *global_state;
 	(*world)->add(new sphere(vec3(0, -1000.0, 0), 1000, new lambertian(vec3(0.5, 0.5, 0.5))));
 	(*world)->add(new sphere(vec3(0, 200, 0), 100, new light(vec3(1, 1, 1))));
-	int sphere_count = 0;
+	int sphere_count = 10;
 
 	for (int a = -sphere_count; a < sphere_count; a++) {
 		for (int b = -sphere_count; b < sphere_count; b++) {
@@ -181,12 +182,12 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 	initWorld << <1, 1 >> > (world, object_counts); cudaDeviceSynchronize();
 
 	//월드 초기화 OBJ 읽기 및 카메라 등
-	const char* objlist[] = { "teapot.obj","buff-doge.obj"};      //읽을 OBJ 리스트, 및의 배열들과 순서 맞춰야함
-	const vec3 translist[] = { vec3(0.0f,0.0f,0.0f), 
+	const char* objlist[] = { "buff-doge.obj"};      //읽을 OBJ 리스트, 및의 배열들과 순서 맞춰야함
+	const vec3 translist[] = { 
 										vec3(10.0f,10.0f,0.0f)};  //위에서 읽을 OBJ를 옮겨주는 벡터
-	const vec3 scalelist[] = { vec3(1.0f,1.0f,1.0f),
+	const vec3 scalelist[] = { 
 										vec3(5.0f,5.0f,5.0f) };   //위에서 읽을 OBJ의 크기를 바꿔주는 벡터
-	ReadOBJ(objlist, 2,translist,scalelist);
+	ReadOBJ(objlist, 1,translist,scalelist);
 	//여기까지 OBJ 읽기
 	curandState* objectinit;
 	cudaMalloc(&objectinit, sizeof(curandState));
