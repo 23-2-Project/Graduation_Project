@@ -117,12 +117,13 @@ public:
 		int idx = 0;
 		stk[idx++] = right;
 		stk[idx++] = left;
-
+		hit_record temp_rec;
 		while (idx > 0) {
 			hittable* now = stk[--idx];
 			if (now->isLeaf()) {
-				if (now->hit(r, interval(ray_t.minv, tmax), rec)) {
-					tmax = rec.t;
+				if (now->hit(r, interval(ray_t.minv, tmax), temp_rec)) {
+					tmax = temp_rec.t;
+					rec = temp_rec;
 					isHit = true;
 				}
 			}

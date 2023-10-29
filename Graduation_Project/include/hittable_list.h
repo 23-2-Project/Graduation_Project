@@ -24,6 +24,8 @@ public:
 		//objects.push_back(object);
 		list[now_size++] = object;
 		bbox = aabb(bbox, object->bounding_box());
+		
+
 	}
 
 	__device__ bool hit(const ray& r, interval ray_t, hit_record& rec) const {

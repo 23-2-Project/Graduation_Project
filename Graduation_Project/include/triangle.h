@@ -56,6 +56,7 @@ public:
 		}
 		rec.t = t;
 		rec.p = r.at(t);
+		rec.normal = normal;
 		rec.mat = mat_ptr;
 		return true;
 	}
