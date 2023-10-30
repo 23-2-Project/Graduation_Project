@@ -13,7 +13,8 @@ class camera {
       int    samples_per_pixel = 10;
       vec3 lookat = vec3(0, 0, 0);
       vec3 lookfrom = vec3(0, 0, -1);
-    __device__ camera(float ar,int iw,int spp,int md,int vf,vec3 lf,vec3 la,vec3 vu) {
+      vec3 background = vec3(0.0f, 0.0f, 0.0f);
+    __device__ camera(float ar,int iw,int spp,int md,int vf,vec3 lf,vec3 la,vec3 vu,vec3 bg) {
         aspect_ratio = ar;
         image_width = iw;
         samples_per_pixel = spp;
@@ -22,12 +23,13 @@ class camera {
         lookfrom = lf;
         lookat = la;
         vup = vu;
+        background = bg;
         update();
     }
 
     __device__ ray get_ray(curandState* state,int i, int j) {
         auto pixel_center = pixel00_loc + (i * pixel_delta_u) + (j * pixel_delta_v);
-        pixel_center += pixel_delta_u * (random_double(state) - 0.5) + pixel_delta_v * (random_double(state) - 0.5);//ÇÈ¼¿ ³» ÀÓÀÇÀÇ Á¡
+        pixel_center += pixel_delta_u * (random_float(state) - 0.5) + pixel_delta_v * (random_float(state) - 0.5);//ÇÈ¼¿ ³» ÀÓÀÇÀÇ Á¡
 
         return ray(center, pixel_center- center);//·»Áî Ã³¸®ÇÏ·Á¸é center ¹Ù²ã¾ßÇÔ
     }
@@ -56,27 +58,22 @@ class camera {
         vec3 cur_attenuation = vec3(1.0, 1.0, 1.0);
         for (int i = 0; i < depth; i++) {
             hit_record rec;
-            //if(false){
-            if ((*world)->hit(cur_ray, 0.001f, FLT_MAX, rec)) {
-                ray scattered;
-                vec3 attenuation;
-                if (rec.mat->scatter(cur_ray, rec, attenuation, scattered, state)) {
-                    cur_ray = scattered;
-                    cur_attenuation *= attenuation;
-                }
-                else {
-                    return vec3(0.0, 0.0, 0.0);
-                }
+            if (!(*world)->hit(cur_ray, interval(0.001f, FLT_MAX), rec)) {
+                return cur_attenuation*background;
             }
-            else {
-                vec3 unit_direction = unit_vector(cur_ray.direction());
-                float t = 0.5f * (unit_direction.y() + 1.0f);
-                vec3 c = (1.0f - t) * vec3(1.0, 1.0, 1.0) + t * vec3(0.5, 0.7, 1.0);
-                return cur_attenuation * c;
+            ray scattered;
+            vec3 attenuation;
+            vec3 color_from_emission = rec.mat->emitted();
+            if (!rec.mat->scatter(cur_ray, rec, attenuation, scattered, state)) {
+                return cur_attenuation*color_from_emission;
             }
-
+            cur_ray = scattered;
+            cur_attenuation *= attenuation;
+            cur_attenuation += color_from_emission;
         }
         return vec3(0.0, 0.0, 0.0);
+
+
     }
     __device__ void changevfov(int x) {
         vfov = max(15, min((int) 150, (int)vfov + x));
@@ -94,7 +91,7 @@ class camera {
         auto theta = degrees_to_radians(vfov);
         auto h = tan(theta / 2);
         auto viewport_height = 2 * h * focal_length;
-        auto viewport_width = viewport_height * (static_cast<double>(image_width) / image_height);
+        auto viewport_width = viewport_height * (static_cast<float>(image_width) / image_height);
 
         // Calculate the u,v,w unit basis vectors for the camera coordinate frame.
         w = unit_vector(lookat - lookfrom);
@@ -118,10 +115,10 @@ class camera {
     }
 private:
     vec3* movdir = new vec3[4];
-    double aspect_ratio = 1.0;  
+    float aspect_ratio = 1.0;  
     int    image_width = 100;  
 
-    double vfov = 90;              
+    float vfov = 90;              
     vec3   vup = vec3(0, 1, 0);     
 
     int    image_height;  

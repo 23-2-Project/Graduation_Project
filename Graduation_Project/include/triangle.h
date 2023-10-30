@@ -25,41 +25,38 @@ public:
 		bbox = aabb(min_point, max_point);
 	};
 
-	__device__ bool hit(const ray& r, float t_min, float t_max, hit_record& rec) const {
+	__device__ bool hit(const ray& r, interval ray_t, hit_record& rec) const {
+
+
 		auto denom = dot(normal, r.direction());
 
-		if (denom < 1e-8 && denom>-(1e-8)) {
+		if (denom < 1e-8f && denom>-(1e-8f)) {
 			return false;//면과 평행하면 hit안함
 		}
 
 		auto t = (D - dot(normal, r.origin())) / denom;
-		if (t_min > t || t_max < t) {
+		if (!ray_t.surrounds(t)) {
 			return false;//범위내에 없다
 		}
-
-		auto intersection = r.at(t);
-
-		auto edge1 = u;
-		auto edge2 = v;
-
-		auto h = cross(r.direction(), edge2);
-		auto a = dot(edge1, h);
-		if (a > -1e-8 && a < 1e-8) {
+		auto h = cross(r.direction(), v);
+		auto a = dot(u, h);
+		if (a > -(1e-8f) && a < 1e-8f) {
 			return false;
 		}
-		auto f = 1.0 / a;
+		float f = 1.0 / a;
 		auto s = r.origin() - Q;
 		auto ue = f * dot(s, h);
-		if (ue < 0.0 || ue>1.0) {
+		if (ue < 0.0f || ue>1.0f) {
 			return false;
 		}
-		auto q = cross(s, edge1);
+		auto q = cross(s, u);
 		auto ve = f * dot(r.direction(), q);
-		if (ve < 0.0 || ue + ve>1.0) {
+		if (ve < 0.0f || ue + ve>1.0f) {
 			return false;
 		}
 		rec.t = t;
 		rec.p = r.at(t);
+		rec.set_face_normal(r, normal);
 		rec.mat = mat_ptr;
 		return true;
 	}
