@@ -16,7 +16,7 @@ int mouse_dx = 0, mouse_dy = 0;
 int keyboard_prev = 0;
 int keyboard_d = 0;
 int pixels = windowWidth * windowHeight;
-dim3 block(16, 16, 1);
+dim3 block(32, 16, 1);
 dim3 grid(image_width / block.x, image_height / block.y, 1);
 
 GLuint pbo_dest;

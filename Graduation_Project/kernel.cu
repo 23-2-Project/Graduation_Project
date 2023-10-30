@@ -80,7 +80,7 @@ __global__ void initCamera(camera** ca) {
 	*ca = new camera(16.0 / 9.0, //종횡비
 		1600,                    //이미지 가로길이
 		1,                       //픽셀당 샘플수
-		50,                      //반사 횟수
+		5,                      //반사 횟수
 		90,                      //시야각
 		vec3(-20, 0, 0),         //카메라 위치 
 		vec3(0, 0, -1),          //바라보는곳
@@ -213,7 +213,7 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 	const vec3 translist[] = { 
 										vec3(10.0f,10.0f,0.0f)};  //위에서 읽을 OBJ를 옮겨주는 벡터
 	const vec3 scalelist[] = { 
-										vec3(5.0f,5.0f,5.0f) };   //위에서 읽을 OBJ의 크기를 바꿔주는 벡터
+										vec3(0.5f,0.5f,0.5f) };   //위에서 읽을 OBJ의 크기를 바꿔주는 벡터
 	ReadOBJ(objlist, 1,translist,scalelist);
 	
 	//여기까지 OBJ 읽기
