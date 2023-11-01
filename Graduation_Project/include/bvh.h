@@ -186,10 +186,10 @@ __global__ void add_bvh_node(bvh_node** bvh_list, int maxSize) {
 	bvh_list[idx] = new bvh_node();
 }
 
-__global__ void make_bvh_tree(curandState* global_state, hittable_list** world, bvh_node** bvh_list, int object_count) {
+__global__ void make_bvh_tree(curandState* global_state, hittable_list** world, bvh_node** bvh_list, bvh_node** bvh_root, int object_count) {
 	curand_init(0, 0, 0, &global_state[0]);
 	curandState local_rand_state = *global_state;
-	(*world) = new hittable_list((hittable*)new bvh_node(world, bvh_list, &local_rand_state), 2);
+	*bvh_root = new bvh_node(world, bvh_list, &local_rand_state);
 }
 
 #endif

@@ -5,6 +5,7 @@
 #include <math_functions.h>
 #include <hittable.h>
 #include <material.h>
+#include <bvh.h>
 
 class camera {
   public:
@@ -53,12 +54,12 @@ class camera {
 
         update();
     }
-    __device__ vec3 ray_color(curandState* state, const ray& r, int depth, hittable_list** world) {
+    __device__ vec3 ray_color(curandState* state, const ray& r, int depth, bvh_node** bvh_tree) {
         ray cur_ray = r;
         vec3 cur_attenuation = vec3(1.0, 1.0, 1.0);
         for (int i = 0; i < depth; i++) {
             hit_record rec;
-            if (!(*world)->hit(cur_ray, interval(0.001f, FLT_MAX), rec)) {
+            if (!(*bvh_tree)->hit(cur_ray, interval(0.001f, FLT_MAX), rec)) {
                 return cur_attenuation*background;
             }
             ray scattered;
@@ -72,8 +73,6 @@ class camera {
             cur_attenuation += color_from_emission;
         }
         return vec3(0.0, 0.0, 0.0);
-
-
     }
     __device__ void changevfov(int x) {
         vfov = max(15, min((int) 150, (int)vfov + x));

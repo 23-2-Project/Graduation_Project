@@ -19,6 +19,7 @@
 
 hittable_list** world;
 bvh_node** bvh_list;
+bvh_node** bvh_tree;
 camera** cam;
 int object_counts = 130000;
 curandState* random_state;
@@ -63,7 +64,7 @@ extern "C" void constructBVH() {
 	printf("%d개\n", object_count);
 	
 	// 정렬
-	srand(time(NULL));
+	/*srand(time(NULL));
 	int axis = rand() % 3;
 	dim3 sortBlock(512, 1, 1);
 	dim3 sortGrid(object_count / sortBlock.x + 1, 1, 1);
@@ -72,7 +73,7 @@ extern "C" void constructBVH() {
 		object_swap << <sortGrid, sortBlock>> > (world, object_count, odd_even, axis);
 		cudaDeviceSynchronize();
 	}
-	printf("정렬 완료\n");
+	printf("정렬 완료\n");*/
 
 	// 할당
 	int startIdx = 1 << 30;
@@ -92,12 +93,13 @@ extern "C" void constructBVH() {
 	//bvh 생성
 	curandState* bvh_state;
 	cudaMalloc(&bvh_state, sizeof(curandState));
-	make_bvh_tree << <1, 1 >> > (bvh_state, world, bvh_list, object_count);
+	cudaMalloc((void**)&bvh_tree, sizeof(bvh_node*));
+	make_bvh_tree << <1, 1 >> > (bvh_state, world, bvh_list, bvh_tree, object_count);
 	cudaDeviceSynchronize();
 	printf("bvh 생성 완료\n");
 }
 
-__global__ void CalculatePerPixel(hittable_list** world, camera** camera, curandState* global_rand_state, unsigned int* g_odata, int imgh, int imgw) {
+__global__ void CalculatePerPixel(bvh_node** bvh_tree, camera** camera, curandState* global_rand_state, unsigned int* g_odata, int imgh, int imgw) {
 	int tx = threadIdx.x;
 	int ty = threadIdx.y;
 	int bw = blockDim.x;
@@ -114,7 +116,7 @@ __global__ void CalculatePerPixel(hittable_list** world, camera** camera, curand
 	float rate = 1 / float(spp);
 	ray r = (*camera)->get_ray(&local_rand_state, i, j);
 	for (int i = 0; i < spp; i++) {
-		color += (*camera)->ray_color(&local_rand_state, r, depth, world);
+		color += (*camera)->ray_color(&local_rand_state, r, depth, bvh_tree);
 	}
 	color *= rate;
 	global_rand_state[index] = local_rand_state;
@@ -262,5 +264,5 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 }
 extern "C" void generatePixel(dim3 grid, dim3 block, int sbytes,
 	unsigned int* g_odata, int imgh, int imgw) {
-	CalculatePerPixel << <grid, block, sbytes >> > (world, cam, random_state, g_odata, imgh, imgw);
+	CalculatePerPixel << <grid, block, sbytes >> > (bvh_tree, cam, random_state, g_odata, imgh, imgw);
 }
