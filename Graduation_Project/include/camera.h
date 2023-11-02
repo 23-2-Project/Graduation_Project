@@ -9,12 +9,12 @@
 
 class camera {
   public:
-
       int    max_depth = 10;
       int    samples_per_pixel = 10;
       vec3 lookat = vec3(0, 0, 0);
       vec3 lookfrom = vec3(0, 0, -1);
       vec3 background = vec3(0.0f, 0.0f, 0.0f);
+
     __device__ camera(float ar,int iw,int spp,int md,int vf,vec3 lf,vec3 la,vec3 vu,vec3 bg) {
         aspect_ratio = ar;
         image_width = iw;
@@ -59,7 +59,7 @@ class camera {
         vec3 cur_attenuation = vec3(1.0, 1.0, 1.0);
         for (int i = 0; i < depth; i++) {
             hit_record rec;
-            if (!(*bvh_tree)->hit(cur_ray, interval(0.001f, FLT_MAX), rec)) {
+            if (!(*bvh_tree)->bvh_hit(cur_ray, interval(0.001f, FLT_MAX), rec)) {
                 return cur_attenuation*background;
             }
             ray scattered;
@@ -126,7 +126,6 @@ private:
     vec3 pixel_delta_u;  
     vec3 pixel_delta_v;  
     vec3 u, v, w;        
-
 };
 
 #endif

@@ -18,7 +18,6 @@
 #include <assimp/postprocess.h>
 
 hittable_list** world;
-bvh_node** bvh_list;
 bvh_node** bvh_tree;
 camera** cam;
 int object_counts = 130000;
@@ -63,7 +62,7 @@ extern "C" void constructBVH() {
 	cudaFree(kernel_value);
 	printf("%d개\n", object_count);
 	
-	// 정렬
+	//정렬
 	/*srand(time(NULL));
 	int axis = rand() % 3;
 	dim3 sortBlock(512, 1, 1);
@@ -75,26 +74,11 @@ extern "C" void constructBVH() {
 	}
 	printf("정렬 완료\n");*/
 
-	// 할당
-	int startIdx = 1 << 30;
-	while (true) {
-		if ((startIdx >> 1) > object_count) { startIdx >>= 1; }
-		else { break; }
-	}
-
-	cudaMalloc((void**)&bvh_list, (startIdx * 2) * sizeof(bvh_node*));
-	cudaDeviceSynchronize();
-	dim3 bvhBlock(512, 1, 1);
-	dim3 bvhGrid(startIdx * 2 / bvhBlock.x + 1, 1, 1);
-	add_bvh_node << <bvhGrid, bvhBlock>> > (bvh_list, startIdx * 2);
-	cudaDeviceSynchronize();
-	printf("할당 완료\n");
-
 	//bvh 생성
 	curandState* bvh_state;
 	cudaMalloc(&bvh_state, sizeof(curandState));
 	cudaMalloc((void**)&bvh_tree, sizeof(bvh_node*));
-	make_bvh_tree << <1, 1 >> > (bvh_state, world, bvh_list, bvh_tree, object_count);
+	make_bvh_tree << <1, 1 >> > (bvh_state, world, bvh_tree, object_count);
 	cudaDeviceSynchronize();
 	printf("bvh 생성 완료\n");
 }
@@ -243,7 +227,7 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 	initWorld << <1, 1 >> > (world, object_counts); cudaDeviceSynchronize();
 
 	//월드 초기화 OBJ 읽기 및 카메라 등
-	const char* objlist[] = { "Chair.obj"};      //읽을 OBJ 리스트, 및의 배열들과 순서 맞춰야함
+	const char* objlist[] = { "chair.obj"};      //읽을 OBJ 리스트, 및의 배열들과 순서 맞춰야함
 	const vec3 translist[] = { 
 										vec3(10.0f,10.0f,0.0f)};  //위에서 읽을 OBJ를 옮겨주는 벡터
 	const vec3 scalelist[] = { 

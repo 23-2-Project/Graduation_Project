@@ -43,8 +43,6 @@ public:
 	}
 
 	__device__ aabb bounding_box() const override { return bbox; }
-
-	__device__ bool isLeaf() const override { return true; }
 };
 
 __global__ void get_object_count(hittable_list** world, int* count) {

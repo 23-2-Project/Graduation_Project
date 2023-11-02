@@ -10,123 +10,87 @@
 
 class bvh_node : public hittable {
 public:
-	hittable* left;
-	hittable* right;
-	hittable** tmp; // 머지소트용 배열
-	aabb bbox;
+	hittable** objects;
+	bool* isObject;
+	aabb* bbox;
+	int startIdx;
 
-	__device__ bvh_node(): left(nullptr), right(nullptr), tmp(nullptr) {};
+	__device__ bvh_node() {};
 
-	__device__ bvh_node(hittable_list** world, bvh_node** bvh_list, curandState* state) {
-		hittable** objects = (*world)->list;
+	__device__ bvh_node(hittable_list** world, curandState* state) {
+		objects = (*world)->list;
 		int object_num = (*world)->now_size;
 
-		int startIdx = 1 << 30;
+		startIdx = 1 << 30;
 		while (true) {
 			if ((startIdx >> 1) > object_num) { startIdx >>= 1; }
 			else { break; }
 		}
 
-		int axis = random_int(state, 0, 2);
-		auto comparator = (axis == 0) ? box_x_compare
-			: (axis == 1) ? box_y_compare
-			: box_z_compare;
+		isObject = new bool[startIdx * 2];
+		bbox = new aabb[startIdx * 2];
 
-		if (object_num == 1) {
-			left = right = objects[0];
-		}
-		else if (object_num == 2) {
-			if (comparator(objects[0], objects[1])) {
-				left = objects[0];
-				right = objects[1];
-			}
-			else {
-				left = objects[1];
-				right = objects[0];
+		// bvh 트리 생성
+		for (int i = 0; i < object_num; ++i) {
+			int idx = i + startIdx;
+			isObject[idx] = true;
+			bbox[idx] = objects[i]->bounding_box();
+
+			if (i & 1) {
+				isObject[idx / 2] = false;
+				bbox[idx / 2] = aabb(bbox[idx - 1], bbox[idx]);
 			}
 		}
-		else {
-			// 정렬하는 부분
-			/*hittable* tmp;
-			for (int i = 0; i < object_num - 1; ++i) {
-				for (int j = i; j < object_num - 1; ++j) {
-					if (!comparator(objects[j], objects[j + 1])) {
-						auto tmp = objects[j];
-						objects[j] = objects[j + 1];
-						objects[j + 1] = tmp;
-					}
-				}
-			}*/
 
-			// bvh 트리 생성
-			for (int i = 0; i < object_num; ++i) {
-				int parent = (i + startIdx) / 2;
-				if (~i & 1) { bvh_list[parent]->left = objects[i]; }
-				else { 
-					bvh_list[parent]->right = objects[i]; 
-					bvh_list[parent]->bbox = aabb(bvh_list[parent]->left->bounding_box(), bvh_list[parent]->right->bounding_box());
-				}
+		for (int i = object_num + startIdx; i < startIdx * 2; ++i) {
+			isObject[i] = false;
+			bbox[i] = aabb();
+
+			if (i & 1) {
+				isObject[i / 2] = false;
+				bbox[i / 2] = aabb(bbox[i - 1], bbox[i]);
 			}
-
-			for (int i = object_num + startIdx; i < startIdx * 2; ++i) {
-				if (~i & 1) { bvh_list[i / 2]->left = bvh_list[i]; }
-				else {
-					bvh_list[i / 2]->right = bvh_list[i];
-					if (i == object_num + startIdx) {
-						bvh_list[i / 2]->bbox = bvh_list[i / 2]->left->bounding_box();
-					}
-					else {
-						bvh_list[i / 2]->bbox = aabb();
-					}
-				}
-			}
-
-			for (int i = startIdx / 2 - 1; i >= 2; --i) {
-				bvh_list[i]->left = bvh_list[i * 2];
-				bvh_list[i]->right = bvh_list[i * 2 + 1];
-				bvh_list[i]->bbox = aabb(bvh_list[i]->left->bounding_box(), bvh_list[i]->right->bounding_box());
-			}
-
-			left = bvh_list[2];
-			right = bvh_list[3];
 		}
 
-		bbox = aabb(left->bounding_box(), right->bounding_box());
+		for (int i = startIdx / 2 - 1; i >= 1; --i) {
+			isObject[i] = false;
+			bbox[i] = aabb(bbox[i * 2], bbox[i * 2 + 1]);
+		}
 	}
 
-	__device__ bool hit(const ray& r, interval ray_t, hit_record& rec) const override {
+	__device__ bool hit(const ray& r, interval ray_t, hit_record& rec) const override {}
+
+	__device__ bool bvh_hit(const ray& r, interval ray_t, hit_record& rec) {
 		float tmax = ray_t.maxv;
-		if (!bbox.hit(r, ray_t)) {
+		if (!bbox[1].hit(r, ray_t)) {
 			return false;
 		}
-
 		bool isHit = false;
-		hittable* stk[32];
+		int stk[32];
 		int idx = 0;
-		stk[idx++] = right;
-		stk[idx++] = left;
+		stk[idx++] = 3;
+		stk[idx++] = 2;
 		hit_record temp_rec;
 		while (idx > 0) {
-			hittable* now = stk[--idx];
-			if (now->isLeaf()) {
-				if (now->hit(r, interval(ray_t.minv, tmax), temp_rec)) {
+			int now = stk[--idx];
+			if (isObject[now]) {
+				if (objects[now - startIdx]->hit(r, interval(ray_t.minv, tmax), temp_rec)) {
 					tmax = temp_rec.t;
 					rec = temp_rec;
 					isHit = true;
 				}
 			}
 			else {
-				if (now->bounding_box().hit(r, ray_t)) {
-					stk[idx++] = ((bvh_node*)now)->right;
-					stk[idx++] = ((bvh_node*)now)->left;
+				if (bbox[now].hit(r, ray_t)) {
+					stk[idx++] = now * 2 + 1;
+					stk[idx++] = now * 2;
 				}
 			}
 		}
 		return isHit;
 	}
 
-	__device__ aabb bounding_box() const override { return bbox; }
-	__device__ bool isLeaf() const override { return false; }
+	__device__ aabb bounding_box() const override { return aabb(); }
 
 	__device__ static bool box_compare(const hittable* a, const hittable* b, int axis_index) {
 		return a->bounding_box().axis(axis_index).minv < b->bounding_box().axis(axis_index).minv;
@@ -142,24 +106,6 @@ public:
 
 	__device__ static bool box_z_compare(const hittable* a, const hittable* b) {
 		return box_compare(a, b, 2);
-	}
-
-private:
-	__device__ void merge(hittable** arr, int left, int mid, int right, int cnt) {
-		int l = left, r = mid + 1, idx = 0;
-		while (l <= mid && r <= right) {
-			if (box_compare(arr[l], arr[r], 0)) {
-				tmp[idx++] = arr[l++];
-			}
-			else {
-				tmp[idx++] = arr[r++];
-			}
-		}
-		while(l <= mid) { tmp[idx++] = arr[l++]; }
-		while(r <= right) { tmp[idx++] = arr[r++]; }
-		for (int i = left; i <= right; ++i) {
-			arr[i] = tmp[i - left];
-		}
 	}
 };
 
@@ -180,16 +126,10 @@ __global__ void object_swap(hittable_list** world, int object_counts, int odd_ev
 	return;
 }
 
-__global__ void add_bvh_node(bvh_node** bvh_list, int maxSize) {
-	int idx = blockIdx.x * blockDim.x + threadIdx.x;
-	if (idx >= maxSize) { return; }
-	bvh_list[idx] = new bvh_node();
-}
-
-__global__ void make_bvh_tree(curandState* global_state, hittable_list** world, bvh_node** bvh_list, bvh_node** bvh_root, int object_count) {
+__global__ void make_bvh_tree(curandState* global_state, hittable_list** world, bvh_node** bvh_tree, int object_count) {
 	curand_init(0, 0, 0, &global_state[0]);
 	curandState local_rand_state = *global_state;
-	*bvh_root = new bvh_node(world, bvh_list, &local_rand_state);
+	*bvh_tree = new bvh_node(world, &local_rand_state);
 }
 
 #endif

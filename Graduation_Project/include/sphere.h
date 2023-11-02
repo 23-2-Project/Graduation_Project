@@ -39,8 +39,6 @@ public:
 	}
 	__device__ aabb bounding_box() const override { return bbox; }
 
-	__device__ bool isLeaf() const override { return true; }
-
 private:
 	vec3 center;
 	float radius;
