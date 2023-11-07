@@ -60,7 +60,7 @@ class camera {
             hit_record rec;
             //if(false){
             if (!(*world)->hit(cur_ray, FLT_MAX, rec)) {
-                return cur_attenuation*background;
+                return cur_attenuation*getData(cur_ray.direction());
             }
             ray scattered;
             vec3 attenuation;
@@ -114,11 +114,34 @@ class camera {
         movdir[2] = u;//©Л
         movdir[3] = -u;//аб
     }
+    __device__ void Setbackground(unsigned char* image,int iw,int ih) {
+        background_image = image;
+        background_height = ih;
+        background_width = iw;
+        bytes_per_scanline = background_width * 3;
+    }
+    __device__ vec3 getData(const vec3& dir) {
+        auto unit = unit_vector(dir);
+        auto theta = acos(unit.y());
+        auto alpha = atan2(-unit.z(), unit.x()) + pi;
+        auto divpi = 1 / pi;
+
+        auto u = static_cast<int>(max(0.0f,min(1.0f,alpha * divpi * 0.5f)) * background_width);
+        auto v = static_cast<int>(max(0.0f, min(1.0f,theta * divpi)) * background_height);
+
+        auto pixel = background_image + v * bytes_per_scanline + u * 3;
+        return color_scale * vec3(pixel[0], pixel[1], pixel[2]);
+
+
+    }
 private:
+    unsigned char* background_image;
+    int bytes_per_scanline;
+    int background_width, background_height;
     vec3* movdir = new vec3[4];
     float aspect_ratio = 1.0;  
     int    image_width = 100;  
-
+    float color_scale = 1.0 / 255.0;
     float vfov = 90;              
     vec3   vup = vec3(0, 1, 0);     
 

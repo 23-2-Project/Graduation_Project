@@ -20,6 +20,7 @@
 #include <stb_image.h>
 
 
+unsigned char* dbackground_image;
 hittable_list** world;
 bvh_node** bvh_list;
 camera** cam;
@@ -79,7 +80,7 @@ __global__ void CalculatePerPixel(hittable_list** world, camera** camera, curand
 	global_rand_state[index] = local_rand_state;
 	g_odata[i + j * imgw] = vectorgb(color);
 }
-__global__ void initCamera(camera** ca) {
+__global__ void initCamera(camera** ca,unsigned char* background_image,int iw,int ih) {
 	*ca = new camera(16.0 / 9.0, //종횡비
 		1600,                    //이미지 가로길이
 		1,                       //픽셀당 샘플수
@@ -89,6 +90,7 @@ __global__ void initCamera(camera** ca) {
 		vec3(0, 0, -1),          //바라보는곳
 		vec3(0, 1, 0),           //업벡터
 		vec3(0.5f, 0.7f, 1));      //배경색
+	(*ca)->Setbackground(background_image,iw,ih);
 }
 __global__ void initWorld(hittable_list** world, int object_counts) {
 	(*world) = new hittable_list(object_counts);
@@ -219,9 +221,16 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 	cudaMalloc(&random_state, pixels * sizeof(curandState));
 	Random_Init << <grid, block, 0 >> > (random_state, image_height);
 
-
+	const int bytes_per_pixel = 3;
 	//배경 이미지 읽기
-	
+	auto n = bytes_per_pixel;
+	int iw, ih;
+	auto background_image = stbi_load("resource/background.png", &iw, &ih, &n, bytes_per_pixel);
+	if (background_image == nullptr) {
+		printf("이미지 로딩 에러\n");
+	}
+	cudaMalloc(&dbackground_image, iw * ih * bytes_per_pixel);
+	cudaMemcpy(dbackground_image, background_image, iw * ih * bytes_per_pixel, cudaMemcpyHostToDevice);
 
 	//랜덤 초기화
 	cudaMalloc((void**)&world, sizeof(hittable*));
@@ -240,7 +249,7 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 	cudaMalloc(&objectinit, sizeof(curandState));
 	addObjects << <1, 1 >> > (objectinit, world, object_counts);
 	cudaMalloc(&cam, sizeof(camera*));
-	initCamera << <1, 1 >> > (cam);
+	initCamera << <1, 1 >> > (cam,dbackground_image,iw,ih);
 
 	cudaDeviceSynchronize();        //쿠다커널이 종료될때까지 기다리는 함수. 위의 world에 오브젝트 다 담길때까지 기다림.
 	//BVH 생성 중 오브젝트 담기는 것 방지용
