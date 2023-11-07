@@ -41,10 +41,15 @@ public:
 		return x;
 	}
 
-	__device__ bool hit(const ray& r, interval ray_t) const {
+	__device__ bool hit(const ray& r, float& maxt) const {
+		auto left = 0.001f;
+		auto right = maxt;
+
 		for (int a = 0; a < 3; a++) {
 			auto invD = 1 / r.direction()[a];
 			auto orig = r.origin()[a];
+			
+
 
 			auto t0 = (axis(a).minv - orig) * invD;
 			auto t1 = (axis(a).maxv - orig) * invD;
@@ -56,12 +61,13 @@ public:
 				t1 = tmp;
 			}
 
-			if (t0 > ray_t.minv) ray_t.minv = t0;
-			if (t1 < ray_t.maxv) ray_t.maxv = t1;
+			if (t0 > left) left = t0;
+			if (t1 < right) right = t1;
 
-			if (ray_t.maxv <= ray_t.minv)
+			if (right <= left)
 				return false;
 		}
+		//maxt = FLT_MAX;
 		return true;
 	}
 };

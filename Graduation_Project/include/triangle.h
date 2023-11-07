@@ -25,7 +25,7 @@ public:
 		bbox = aabb(min_point, max_point);
 	};
 
-	__device__ bool hit(const ray& r, interval ray_t, hit_record& rec) const {
+	__device__ bool hit(const ray& r, float maxt, hit_record& rec) const {
 
 
 		auto denom = dot(normal, r.direction());
@@ -35,7 +35,7 @@ public:
 		}
 
 		auto t = (D - dot(normal, r.origin())) / denom;
-		if (!ray_t.surrounds(t)) {
+		if (t > maxt || t < 0.001f) {
 			return false;//범위내에 없다
 		}
 		auto h = cross(r.direction(), v);

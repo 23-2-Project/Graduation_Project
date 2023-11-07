@@ -16,11 +16,14 @@
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
 
 hittable_list** world;
 bvh_node** bvh_list;
 camera** cam;
-int object_counts = 130000;
+int object_counts = 1000;
 curandState* random_state;
 int** test;
 // convert floating point rgb color to 8-bit integer
@@ -32,7 +35,7 @@ __device__ int rgbToInt(float r, float g, float b) {
 	return (int(b) << 16) | (int(g) << 8) | int(r);
 }
 __device__ int vectorgb(vec3 color) {
-	return rgbToInt(color.x()*255,color.y()*255,color.z()*255);
+	return rgbToInt(color.x() * 255, color.y() * 255, color.z() * 255);
 }
 __global__ void movCam(camera** ca, int direction, int weight) {
 	(*ca)->moveorigin(direction, weight);
@@ -85,7 +88,7 @@ __global__ void initCamera(camera** ca) {
 		vec3(-20, 0, 0),         //카메라 위치 
 		vec3(0, 0, -1),          //바라보는곳
 		vec3(0, 1, 0),           //업벡터
-		vec3(0.5f,0.7f,1));      //배경색
+		vec3(0.5f, 0.7f, 1));      //배경색
 }
 __global__ void initWorld(hittable_list** world, int object_counts) {
 	(*world) = new hittable_list(object_counts);
@@ -127,8 +130,8 @@ __global__ void makeBVH(curandState* global_state, hittable_list** world, bvh_no
 	(*world) = new hittable_list((hittable*)new bvh_node(world, bvh_list, &local_rand_state), object_counts);
 
 }
-__global__ void addTriangle(hittable_list** world,vec3 a,vec3 b,vec3 c,vec3 color) {
-	(*world)->add(new triangle(a, b, c, new lambertian(color)));
+__global__ void addTriangle(hittable_list** world, vec3 a, vec3 b, vec3 c, vec3 color) {
+	(*world)->add(new triangle(a, b, c, new dielectric(2.0f)));
 
 }
 __global__ void Random_Init(curandState* global_state, int ih) {
@@ -142,7 +145,18 @@ __global__ void Random_Init(curandState* global_state, int ih) {
 	curand_init(pixel_index, 0, 0, &global_state[pixel_index]);
 }
 
-void ReadOBJ(const char* objlist[], int obj_counts,const vec3 translist[],const vec3 scalelist[]) {
+
+__global__ void initMesh(hittable_list** tmp, int obj_counts) {
+	(*tmp) = new hittable_list(obj_counts);
+}
+__global__ void mergeMesh(hittable_list** world, hittable_list** tmp, bvh_node** node, curandState* rand_state) {
+	curand_init(0, 0, 0, &rand_state[0]);
+	curandState local_rand_state = *rand_state;
+
+	(*world)->add(new bvh_node(tmp, node, &local_rand_state));
+}
+
+void ReadOBJ(const char* objlist[], int obj_counts, const vec3 translist[], const vec3 scalelist[]) {
 	Assimp::Importer importer;
 	for (int c = 0; c < obj_counts; c++) {
 		char str[100] = "resource/";
@@ -158,6 +172,22 @@ void ReadOBJ(const char* objlist[], int obj_counts,const vec3 translist[],const 
 		int cnt = 0;
 		for (int i = 0; i < scene->mNumMeshes; i++) {
 			auto mesh = scene->mMeshes[i];
+			curandState* mesh_state;
+			cudaMalloc(&mesh_state, sizeof(curandState));
+
+			bvh_node** node;
+			hittable_list** tmp;
+			cudaMalloc(&tmp, sizeof(hittable_list*));
+			int startIdx = 1 << 30;
+			while (true) {
+				if ((startIdx >> 1) > mesh->mNumFaces) { startIdx >>= 1; }
+				else { break; }
+			}
+
+			cudaMalloc((void**)&node, startIdx * sizeof(bvh_node*));
+
+			initMesh << <1, 1 >> > (tmp, startIdx);
+
 			for (int j = 0; j < mesh->mNumFaces; j++) {
 				auto Face = mesh->mFaces[j];
 				vec3 a(mesh->mVertices[Face.mIndices[0]].x, mesh->mVertices[Face.mIndices[0]].y, mesh->mVertices[Face.mIndices[0]].z);
@@ -166,22 +196,18 @@ void ReadOBJ(const char* objlist[], int obj_counts,const vec3 translist[],const 
 				a *= scale;				b *= scale;				c *= scale;
 				a += translate;		b += translate;		c += translate;
 				aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
-				aiColor4D diffuse,specular,ambient;
+				aiColor4D diffuse, specular, ambient;
 				aiGetMaterialColor(material, AI_MATKEY_COLOR_AMBIENT, &ambient);
 				aiGetMaterialColor(material, AI_MATKEY_COLOR_SPECULAR, &specular);
 				aiGetMaterialColor(material, AI_MATKEY_COLOR_DIFFUSE, &diffuse);
 				aiColor4D sum = diffuse + specular + ambient;
 				vec3 color(sum.r, sum.g, sum.b);
 				//color = vec3(1.0f, 0.0f, 0.0f);
-				addTriangle << <1, 1 >> > (world, a, b, c,color);
-				cudaError_t err = cudaGetLastError();
-				if (cudaSuccess != err) {
-					printf("CUDA:ERROR:cuda failure \"%s\"\n", cudaGetErrorString(err));
-				}
-				else {
-					printf("%d\n", cnt++);
-				}
+				addTriangle << <1, 1 >> > (tmp, a, b, c, color);
+
 			}
+			cudaDeviceSynchronize();
+			mergeMesh << <1, 1 >> > (world, tmp, node, mesh_state);
 		}
 
 	}
@@ -193,44 +219,37 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 	cudaMalloc(&random_state, pixels * sizeof(curandState));
 	Random_Init << <grid, block, 0 >> > (random_state, image_height);
 
-	/*printf("%d\n", sizeof(int));
-	cudaMalloc(&test, 2600000000*sizeof(int));
-	cudaError_t err = cudaGetLastError();
-	if (cudaSuccess != err) {
-		printf("CUDA:ERROR:cuda failure \"%s\"\n", cudaGetErrorString(err));
-		exit(1);
-	}
-	else {
-		printf("CUDA Success\n");
-	}*/
+
+	//배경 이미지 읽기
+	
 
 	//랜덤 초기화
 	cudaMalloc((void**)&world, sizeof(hittable*));
 	initWorld << <1, 1 >> > (world, object_counts); cudaDeviceSynchronize();
 
 	//월드 초기화 OBJ 읽기 및 카메라 등
-	const char* objlist[] = { "Chair.obj"};      //읽을 OBJ 리스트, 및의 배열들과 순서 맞춰야함
-	const vec3 translist[] = { 
-										vec3(10.0f,10.0f,0.0f)};  //위에서 읽을 OBJ를 옮겨주는 벡터
-	const vec3 scalelist[] = { 
-										vec3(0.5f,0.5f,0.5f) };   //위에서 읽을 OBJ의 크기를 바꿔주는 벡터
-	ReadOBJ(objlist, 1,translist,scalelist);
-	
+	const char* objlist[] = { "buff-doge.obj" };      //읽을 OBJ 리스트, 및의 배열들과 순서 맞춰야함
+	const vec3 translist[] = {
+										vec3(10.0f,10.0f,0.0f) };  //위에서 읽을 OBJ를 옮겨주는 벡터
+	const vec3 scalelist[] = {
+										vec3(5.0f,5.0f,5.0f) };   //위에서 읽을 OBJ의 크기를 바꿔주는 벡터
+	ReadOBJ(objlist, 1, translist, scalelist);
+
 	//여기까지 OBJ 읽기
 	curandState* objectinit;
 	cudaMalloc(&objectinit, sizeof(curandState));
-	addObjects<< <1, 1 >> > (objectinit, world, object_counts);
+	addObjects << <1, 1 >> > (objectinit, world, object_counts);
 	cudaMalloc(&cam, sizeof(camera*));
 	initCamera << <1, 1 >> > (cam);
 
 	cudaDeviceSynchronize();        //쿠다커널이 종료될때까지 기다리는 함수. 위의 world에 오브젝트 다 담길때까지 기다림.
-	                                //BVH 생성 중 오브젝트 담기는 것 방지용
+	//BVH 생성 중 오브젝트 담기는 것 방지용
 
 	curandState* bvh_state;
 	cudaMalloc(&bvh_state, sizeof(curandState));
 	cudaMalloc((void**)&bvh_list, object_counts * sizeof(bvh_node*));
 	makeBVH << <1, 1 >> > (bvh_state, world, bvh_list, object_counts);
-	
+
 }
 extern "C" void generatePixel(dim3 grid, dim3 block, int sbytes,
 	unsigned int* g_odata, int imgh, int imgw) {

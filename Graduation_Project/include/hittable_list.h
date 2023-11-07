@@ -28,12 +28,12 @@ public:
 
 	}
 
-	__device__ bool hit(const ray& r, interval ray_t, hit_record& rec) const {
+	__device__ bool hit(const ray& r, float maxt, hit_record& rec) const {
 		hit_record temp_rec;
 		bool hit_anything = false;
-		float closest_so_far = ray_t.maxv;
+		float closest_so_far = maxt;
 		for (int i = 0; i < now_size; i++) {
-			if (list[i]->hit(r, interval(ray_t.minv, closest_so_far), temp_rec)) {
+			if (list[i]->hit(r, closest_so_far, temp_rec)) {
 				hit_anything = true;
 				closest_so_far = temp_rec.t;
 				rec = temp_rec;

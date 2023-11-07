@@ -106,9 +106,9 @@ public:
 		bbox = aabb(left->bounding_box(), right->bounding_box());
 	}
 
-	__device__ bool hit(const ray& r, interval ray_t, hit_record& rec) const override {
-		float tmax = ray_t.maxv;
-		if (!bbox.hit(r, ray_t)) {
+	__device__ bool hit(const ray& r, float maxt, hit_record& rec) const override {
+		float tmax = maxt;
+		if (!bbox.hit(r, maxt)) {
 			return false;
 		}
 
@@ -121,14 +121,14 @@ public:
 		while (idx > 0) {
 			hittable* now = stk[--idx];
 			if (now->isLeaf()) {
-				if (now->hit(r, interval(ray_t.minv, tmax), temp_rec)) {
+				if (now->hit(r, tmax, temp_rec)) {
 					tmax = temp_rec.t;
 					rec = temp_rec;
 					isHit = true;
 				}
 			}
 			else {
-				if (now->bounding_box().hit(r, ray_t)) {
+				if (now->bounding_box().hit(r, tmax)) {
 					stk[idx++] = ((bvh_node*)now)->right;
 					stk[idx++] = ((bvh_node*)now)->left;
 				}
