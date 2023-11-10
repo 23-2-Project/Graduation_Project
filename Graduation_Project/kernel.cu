@@ -20,9 +20,10 @@
 hittable_list** world;
 bvh_node** bvh_tree;
 camera** cam;
-int object_counts = 130000;
+int object_counts = 400000;
 curandState* random_state;
 int** test;
+
 // convert floating point rgb color to 8-bit integer
 __device__ float clamp(float x, float a, float b) { return max(a, min(b, x)); }
 __device__ int rgbToInt(float r, float g, float b) {
@@ -112,7 +113,7 @@ __global__ void initCamera(camera** ca) {
 		1,                       //픽셀당 샘플수
 		5,                      //반사 횟수
 		90,                      //시야각
-		vec3(-20, 0, 0),         //카메라 위치 
+		vec3(-2000, 10, 0),         //카메라 위치 
 		vec3(0, 0, -1),          //바라보는곳
 		vec3(0, 1, 0),           //업벡터
 		vec3(0.5f,0.7f,1));      //배경색
@@ -147,8 +148,10 @@ __global__ void addObjects(curandState* global_state, hittable_list** world, int
 	}
 }
 
-__global__ void addTriangle(hittable_list** world,vec3 a,vec3 b,vec3 c,vec3 color) {
-	(*world)->add(new triangle(a, b, c, new lambertian(color)));
+__global__ void addTriangle(hittable_list** world, vec3* data, int cnt) {
+	int idx = blockIdx.x * blockDim.x + threadIdx.x;
+	if (idx >= cnt) { return; }
+	(*world)->add(new triangle(data[idx * 4], data[idx * 4 + 1], data[idx * 4 + 2], new lambertian(data[idx * 4 + 3])), (*world)->now_size + idx);
 }
 __global__ void Random_Init(curandState* global_state, int ih) {
 	int tx = threadIdx.x;
@@ -174,6 +177,12 @@ void ReadOBJ(const char* objlist[], int obj_counts,const vec3 translist[],const 
 		}
 		vec3 translate = translist[c];
 		vec3 scale = scalelist[c];
+
+		vec3* obj_data;
+		vec3* kernel_obj_data;
+		cudaMalloc(&kernel_obj_data, object_counts * 4 * sizeof(vec3));
+		obj_data = (vec3*)malloc(object_counts * 4 * sizeof(vec3));
+
 		int cnt = 0;
 		for (int i = 0; i < scene->mNumMeshes; i++) {
 			auto mesh = scene->mMeshes[i];
@@ -192,16 +201,18 @@ void ReadOBJ(const char* objlist[], int obj_counts,const vec3 translist[],const 
 				aiColor4D sum = diffuse + specular + ambient;
 				vec3 color(sum.r, sum.g, sum.b);
 				//color = vec3(1.0f, 0.0f, 0.0f);
-				addTriangle << <1, 1 >> > (world, a, b, c,color);
-				cudaError_t err = cudaGetLastError();
-				if (cudaSuccess != err) {
-					printf("CUDA:ERROR:cuda failure \"%s\"\n", cudaGetErrorString(err));
-				}
-				else {
-					printf("%d\n", cnt++);
-				}
+				obj_data[cnt * 4] = a;
+				obj_data[cnt * 4 + 1] = b;
+				obj_data[cnt * 4 + 2] = c;
+				obj_data[cnt * 4 + 3] = color;
+				cnt++;
 			}
 		}
+		cudaMemcpy(kernel_obj_data, obj_data, cnt * 4 * sizeof(vec3), cudaMemcpyHostToDevice);
+		printf("triangle world에 추가중\n");
+		addTriangle << <cnt / 32 + 1, 256 >> > (world, kernel_obj_data, cnt);
+		cudaDeviceSynchronize();
+		add_object_count << <1, 1 >> > (world, cnt);
 	}
 }
 
@@ -227,12 +238,12 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 	initWorld << <1, 1 >> > (world, object_counts); cudaDeviceSynchronize();
 
 	//월드 초기화 OBJ 읽기 및 카메라 등
-	const char* objlist[] = { "chair.obj"};      //읽을 OBJ 리스트, 및의 배열들과 순서 맞춰야함
+	const char* objlist[] = { "conference.obj"};      //읽을 OBJ 리스트, 및의 배열들과 순서 맞춰야함
 	const vec3 translist[] = { 
 										vec3(10.0f,10.0f,0.0f)};  //위에서 읽을 OBJ를 옮겨주는 벡터
 	const vec3 scalelist[] = { 
 										vec3(0.5f,0.5f,0.5f) };   //위에서 읽을 OBJ의 크기를 바꿔주는 벡터
-	ReadOBJ(objlist, 1,translist,scalelist);
+	ReadOBJ(objlist, 1, translist, scalelist);
 	
 	//여기까지 OBJ 읽기
 	curandState* objectinit;

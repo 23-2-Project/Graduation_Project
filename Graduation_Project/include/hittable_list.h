@@ -12,7 +12,8 @@ public:
 
 	__device__ hittable_list(int n) {
 		max_size = n;
-		list = (hittable**)malloc(max_size * sizeof(hittable*));
+		list = new hittable* [n];
+		//list = (hittable**)malloc(max_size * sizeof(hittable*));
 		now_size = 0;
 	}
 
@@ -23,9 +24,10 @@ public:
 	__device__ void add(hittable* object) {
 		//objects.push_back(object);
 		list[now_size++] = object;
-		bbox = aabb(bbox, object->bounding_box());
-		
+	}
 
+	__device__ void add(hittable* object, int idx) {
+		list[idx] = object;
 	}
 
 	__device__ bool hit(const ray& r, interval ray_t, hit_record& rec) const {
@@ -47,6 +49,10 @@ public:
 
 __global__ void get_object_count(hittable_list** world, int* count) {
 	*count = (*world)->now_size;
+}
+
+__global__ void add_object_count(hittable_list** world, int cnt) {
+	(*world)->now_size += cnt;
 }
 
 #endif
