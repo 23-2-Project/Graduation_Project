@@ -9,6 +9,7 @@
 #include <hittable_list.h>
 #include <material.h>
 #include <vec3.h>
+#include <quad.h>
 #include <camera.h>
 #include <bvh.h>
 #include <triangle.h>
@@ -20,7 +21,7 @@
 hittable_list** world;
 bvh_node** bvh_tree;
 camera** cam;
-int object_counts = 400000;
+int object_counts = 1000000;
 curandState* random_state;
 int** test;
 
@@ -218,7 +219,7 @@ void ReadOBJ(const char* objlist[], int obj_counts,const vec3 translist[],const 
 
 extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_width, int pixels) {
 	//cudaDeviceSetLimit(cudaLimitStackSize, 256 * 1024 * 1024);
-	cudaDeviceSetLimit(cudaLimitMallocHeapSize, 256 * 1024 * 1024);
+	cudaDeviceSetLimit(cudaLimitMallocHeapSize, 512 * 1024 * 1024);
 	cudaMalloc(&random_state, pixels * sizeof(curandState));
 	Random_Init << <grid, block, 0 >> > (random_state, image_height);
 
@@ -238,12 +239,10 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 	initWorld << <1, 1 >> > (world, object_counts); cudaDeviceSynchronize();
 
 	//월드 초기화 OBJ 읽기 및 카메라 등
-	const char* objlist[] = { "conference.obj"};      //읽을 OBJ 리스트, 및의 배열들과 순서 맞춰야함
-	const vec3 translist[] = { 
-										vec3(10.0f,10.0f,0.0f)};  //위에서 읽을 OBJ를 옮겨주는 벡터
-	const vec3 scalelist[] = { 
-										vec3(0.5f,0.5f,0.5f) };   //위에서 읽을 OBJ의 크기를 바꿔주는 벡터
-	ReadOBJ(objlist, 1, translist, scalelist);
+	const char* objlist[] = { "Grenade.obj","Skull.obj","Chair.obj","buff-doge.obj","cheems.obj"};      //읽을 OBJ 리스트, 및의 배열들과 순서 맞춰야함
+	const vec3 translist[] = { vec3(10.0f,10.0f,0.0f),vec3(0.0f,0.0f,0.0f),vec3(0.0f,0.0f,5.0f) ,vec3(0.0f,0.0f,0.0f),vec3(0.0f,0.0f,5.0f) };  //위에서 읽을 OBJ를 옮겨주는 벡터
+	const vec3 scalelist[] = { vec3(0.5f,0.5f,0.5f),vec3(0.5f,0.5f,0.5f),vec3(0.5f,0.5f,0.5f),vec3(0.5f,0.5f,0.5f),vec3(1.0f,1.0f,1.0f) };   //위에서 읽을 OBJ의 크기를 바꿔주는 벡터
+	ReadOBJ(objlist, 5, translist, scalelist);
 	
 	//여기까지 OBJ 읽기
 	curandState* objectinit;
