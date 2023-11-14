@@ -17,7 +17,6 @@
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
-//#include <box.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -33,9 +32,9 @@ enum mat {
 	LAMBERTIAN, METAL, DIELECTRIC, LIGHT
 };
 
-__constant__ int spp = 1;
-__constant__ int depth = 5;
-__constant__ float rate = 1.0f;
+__constant__ int spp = 100;
+__constant__ int depth = 20;
+__constant__ float rate = 0.01f;
 
 // convert floating point rgb color to 8-bit integer
 __device__ float clamp(float x, float a, float b) { return max(a, min(b, x)); }
@@ -74,7 +73,6 @@ extern "C" void constructBVH() {
 	get_object_count << <1, 1 >> > (world, kernel_value);
 	cudaMemcpy(&object_count, kernel_value, sizeof(int), cudaMemcpyDeviceToHost);
 	cudaFree(kernel_value);
-	printf("%d개\n", object_count);
 	
 	//정렬
 	/*srand(time(NULL));
@@ -94,7 +92,6 @@ extern "C" void constructBVH() {
 	cudaMalloc((void**)&bvh_tree, sizeof(bvh_node*));
 	make_bvh_tree << <1, 1 >> > (bvh_state, world, bvh_tree, object_count);
 	cudaDeviceSynchronize();
-	printf("bvh 생성 완료\n");
 }
 
 __global__ void CalculatePerPixel(bvh_node** bvh_tree, camera** camera, curandState* global_rand_state, unsigned int* g_odata, int imgh, int imgw) {
@@ -110,10 +107,10 @@ __global__ void CalculatePerPixel(bvh_node** bvh_tree, camera** camera, curandSt
 	vec3 color(0, 0, 0);
 
 	ray r = (*camera)->get_ray(&local_rand_state, i, j);
-	//for (int i = 0; i < spp; i++) {
+	for (int i = 0; i < spp; i++) {
 		color += (*camera)->ray_color(&local_rand_state, r, depth, bvh_tree);
-	//}
-	//color *= rate;
+	}
+	color *= rate;
 	global_rand_state[index] = local_rand_state;
 	g_odata[i + j * imgw] = vectorgb(color);
 }
@@ -207,11 +204,10 @@ void ReadOBJ(const char* objlist[], int obj_counts,const vec3 translist[],const 
 	for (int c = 0; c < obj_counts; c++) {
 		char str[100] = "resource/";
 		strcat(str, objlist[c]);
-		printf("%s\n", str);
 		const aiScene* scene = importer.ReadFile(str, aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
 		if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) // if is Not Zero
 		{
-			printf("Read File Exception\n");
+			std::cerr << "Read File Exception\n";
 		}
 		vec3 translate = translist[c];
 		vec3 scale = scalelist[c];
@@ -248,7 +244,6 @@ void ReadOBJ(const char* objlist[], int obj_counts,const vec3 translist[],const 
 			}
 		}
 		cudaMemcpy(kernel_obj_data, obj_data, cnt * 4 * sizeof(vec3), cudaMemcpyHostToDevice);
-		printf("triangle world에 추가중\n");
 		addTriangle << <cnt / 32 + 1, 256 >> > (world, kernel_obj_data, cnt, material);
 		cudaDeviceSynchronize();
 		add_object_count << <1, 1 >> > (world, cnt);
@@ -257,7 +252,7 @@ void ReadOBJ(const char* objlist[], int obj_counts,const vec3 translist[],const 
 
 extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_width, int pixels) {
 	//cudaDeviceSetLimit(cudaLimitStackSize, 256 * 1024 * 1024);
-	cudaDeviceSetLimit(cudaLimitMallocHeapSize, 512 * 1024 * 1024);
+	
 	cudaMalloc(&random_state, pixels * sizeof(curandState));
 	Random_Init << <grid, block, 0 >> > (random_state, image_height);
 
@@ -268,7 +263,7 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 	//unsigned char* background_image = nullptr;
 	auto background_image = stbi_load("resource/modern_buildings_2_4k.hdr", &iw, &ih, &n, bytes_per_pixel);
 	if (background_image == nullptr) {
-		printf("이미지 로딩 에러\n");
+		std::cerr << "이미지 로딩 에러\n";
 	}
 	cudaMalloc(&dbackground_image, iw * ih * bytes_per_pixel);
 	cudaMemcpy(dbackground_image, background_image, iw * ih * bytes_per_pixel, cudaMemcpyHostToDevice);
@@ -300,4 +295,29 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 extern "C" void generatePixel(dim3 grid, dim3 block, int sbytes,
 	unsigned int* g_odata, int imgh, int imgw) {
 	CalculatePerPixel << <grid, block, sbytes >> > (bvh_tree, cam, random_state, g_odata, imgh, imgw);
+}
+
+int main() {
+	unsigned int image_width = 1600;
+	unsigned int image_height = 900;
+	unsigned int* out_data;
+	dim3 block(16, 16, 1), grid(image_width / block.x, image_height / block.y, 1);
+
+	cudaDeviceSetLimit(cudaLimitMallocHeapSize, 512 * 1024 * 1024);
+	cudaMalloc(&out_data, image_width * image_height * sizeof(unsigned int));
+	initCuda(grid, block, image_height, image_width, image_height * image_width);
+	cudaDeviceSynchronize();
+	generatePixel(grid, block, 0, out_data, image_height, image_width);
+	cudaDeviceSynchronize();
+	std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
+	for (int j = image_height - 1; j >= 0; --j) {
+		for (int i = 0; i < image_width; i++) {
+			size_t pixel_index = i + j * image_width;
+			unsigned int ir = (out_data[pixel_index] & 0x00ff0000) >> 16;
+			unsigned int ig = (out_data[pixel_index] & 0x0000ff00) >> 8;
+			unsigned int ib = (out_data[pixel_index] & 0x000000ff);
+			std::cout << ir << ' ' << ig << ' ' << ib << '\n';
+		}
+	}
+	return 0;
 }
