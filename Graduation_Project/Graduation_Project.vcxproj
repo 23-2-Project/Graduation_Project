@@ -92,7 +92,6 @@
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="box.h" />
     <ClInclude Include="include\aabb.h" />
     <ClInclude Include="include\bvh.h" />
     <ClInclude Include="include\camera.h" />

@@ -24,7 +24,6 @@
     <ClInclude Include="include\bvh.h" />
     <ClInclude Include="include\obj.h" />
     <ClInclude Include="include\quad.h" />
-    <ClInclude Include="box.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />

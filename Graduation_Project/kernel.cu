@@ -145,24 +145,31 @@ __global__ void addObjects(curandState* global_state, hittable_list** world, int
 
 	(*world)->add(new sphere(vec3(0, 200, 0), 100, new light(vec3(1, 1, 1))));
 
-	int sphere_count = 2;
+	int sphere_count = 3;
 	for (int a = -sphere_count; a < sphere_count; a++) {
 		for (int b = -sphere_count; b < sphere_count; b++) {
 			float choose_mat = RND;
+			float scale = RND * 5.0f;
 			vec3 center(a + RND, (RND + 1) * (RND + 1), b + RND);
-			if (choose_mat < 0.8f) {
-				(*world)->add(new sphere(center, 0.2, new metal(vec3(0.5f * (1.0f + RND), 0.5f * (1.0f + RND), 0.5f * (1.0f + RND)), 0.0f/*0.5f * RND*/)));
+
+			if (choose_mat < 0.3f) {
+				(*world)->add(new sphere(center, 0.2 , new lambertian(vec3(RND * RND, RND * RND, RND * RND))));
+			} else if (choose_mat < 0.5f) {
+				//(*world)->add(new sphere(center, 0.2, new metal(vec3(0.5f * (1.0f + RND), 0.5f * (1.0f + RND), 0.5f * (1.0f + RND)), 0.0f/*0.5f * RND*/)));
+				(*world)->add_box(center, center + vec3(RND, RND, RND), new lambertian(vec3(RND * RND, RND * RND, RND * RND)));
+			}
+			else if (choose_mat < 0.9f) {
+				(*world)->add_box(center, center + vec3(RND, RND, RND), new metal(vec3(0.3f * (1.0f + RND), 0.4f * (1.0f + RND), 0.5f * (1.0f + RND)), 0));
 			}
 			else if (choose_mat < 0.95f) {
-				(*world)->add(new sphere(center, 0.2, new lambertian(vec3(RND * RND, RND * RND, RND * RND))));
+				(*world)->add_box(center, center + vec3(RND, RND, RND), new dielectric(1.5));
 			}
 			else {
-				(*world)->add(new sphere(center, 0.2, new dielectric(1.5)));
-				(*world)->add_box(center, center + vec3(a + RND, a + RND, a + RND), new metal(vec3(0.1, 0.2, 0.3), 0));
+				(*world)->add(new sphere(center, 0.3, new dielectric(1.5)));
 			}
 		}
 	}
-	(*world)->add_box(vec3(130, 0, 65), vec3(295, 165, 230), new dielectric(1.5));
+	(*world)->add_box(vec3(-3, 2, -3), vec3(-7, 7, -8), new dielectric(1.3f));
 }
 
 __global__ void addTriangle(hittable_list** world, vec3* data, int cnt, mat m) {
@@ -272,11 +279,11 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 	initWorld << <1, 1 >> > (world, object_counts); cudaDeviceSynchronize();
 
 	//월드 초기화 OBJ 읽기 및 카메라 등
-	const char* objlist[] = { "Grenade.obj","Skull.obj","Chair.obj","buff-doge.obj","cheems.obj"};      //읽을 OBJ 리스트, 및의 배열들과 순서 맞춰야함
-	const vec3 translist[] = { vec3(10.0f,10.0f,0.0f),vec3(0.0f,0.0f,0.0f),vec3(0.0f,0.0f,5.0f) ,vec3(0.0f,0.0f,0.0f),vec3(0.0f,0.0f,5.0f) };  //위에서 읽을 OBJ를 옮겨주는 벡터
-	const vec3 scalelist[] = { vec3(0.5f,0.5f,0.5f),vec3(0.5f,0.5f,0.5f),vec3(0.5f,0.5f,0.5f),vec3(0.5f,0.5f,0.5f),vec3(1.0f,1.0f,1.0f) };   //위에서 읽을 OBJ의 크기를 바꿔주는 벡터
-	const mat matlist[] = { METAL, DIELECTRIC, LAMBERTIAN, METAL, DIELECTRIC };
-	//ReadOBJ(objlist, 5, translist, scalelist, matlist);
+	const char* objlist[] = { "Grenade.obj","Skull.obj","Chair.obj","deer.obj","cheems.obj"};      //읽을 OBJ 리스트, 및의 배열들과 순서 맞춰야함
+	const vec3 translist[] = { vec3(10.0f,5.0f,0.0f),vec3(-5.0f,3.0f,-5.0f),vec3(0.0f,0.0f,5.0f) ,vec3(3.0f, 2.0f, -5.0f),vec3(0.0f,0.0f,5.0f) };  //위에서 읽을 OBJ를 옮겨주는 벡터
+	const vec3 scalelist[] = { vec3(0.5f,0.5f,0.5f),vec3(0.5f,0.5f,0.5f),vec3(0.5f,0.5f,0.5f),vec3(0.005f,0.005f,0.005f),vec3(1.0f,1.0f,1.0f) };   //위에서 읽을 OBJ의 크기를 바꿔주는 벡터
+	const mat matlist[] = { METAL, LAMBERTIAN, LAMBERTIAN, METAL, DIELECTRIC };
+	ReadOBJ(objlist, 5, translist, scalelist, matlist);
 	
 	//여기까지 OBJ 읽기
 	curandState* objectinit;

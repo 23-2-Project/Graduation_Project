@@ -2,7 +2,7 @@
 #define HITTABLELISTH
 
 #include <hittable.h>
-#include <box.h>
+#include <quad.h>
 
 class hittable_list : public hittable {
 public:
