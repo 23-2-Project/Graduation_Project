@@ -18,6 +18,8 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 #include <fstream>
+#include "timer.h"
+#include <iostream>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -33,9 +35,9 @@ enum mat {
 	LAMBERTIAN, METAL, DIELECTRIC, LIGHT
 };
 
-__constant__ int spp = 100;
-__constant__ int depth = 20;
-__constant__ float rate = 0.01f;
+__constant__ int spp = 500;
+__constant__ int depth = 50;
+__constant__ float rate = 0.002f;
 
 // convert floating point rgb color to 8-bit integer
 __device__ float clamp(float x, float a, float b) { return max(a, min(b, x)); }
@@ -123,7 +125,7 @@ __global__ void initCamera(camera** ca, unsigned char* background_image, int iw,
 		spp,                       //픽셀당 샘플수
 		depth,                      //반사 횟수
 		90,                      //시야각
-		vec3(-20, 5, 0),         //카메라 위치 
+		vec3(-10, 5, 0),         //카메라 위치 
 		vec3(0, 0, -1),          //바라보는곳
 		vec3(0, 1, 0),           //업벡터
 		vec3(0.5f, 0.7f, 1));      //배경색
@@ -308,9 +310,12 @@ int main() {
 	cudaDeviceSetLimit(cudaLimitMallocHeapSize, 512 * 1024 * 1024);
 	cudaMalloc(&out_data, image_width * image_height * sizeof(unsigned int));
 	out_data_host = (unsigned int*)malloc(image_width * image_height * sizeof(unsigned int));
-
+	auto start = std::chrono::high_resolution_clock::now();
 	initCuda(grid, block, image_height, image_width, image_height * image_width);
 	cudaDeviceSynchronize();
+	auto end = std::chrono::high_resolution_clock::now();
+	
+	
 	generatePixel(grid, block, 0, out_data, image_height, image_width);
 	cudaDeviceSynchronize();
 	cudaMemcpy(out_data_host, out_data, image_width * image_height * sizeof(unsigned int), cudaMemcpyDeviceToHost);
@@ -333,5 +338,7 @@ int main() {
 		}
 	}
 	output.close();
+
+	std::cout << "이미지 생성 시간 : " << std::chrono::duration_cast<std::chrono::seconds>(end - start).count() << "s\n";
 	return 0;
 }
