@@ -79,7 +79,4 @@ class quad : public hittable {
     double D;
     vec3 w;
 };
-
-
-
 #endif

@@ -17,6 +17,8 @@
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
+//#include <box.h>
+
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 unsigned char* dbackground_image;
@@ -25,7 +27,15 @@ bvh_node** bvh_tree;
 camera** cam;
 int object_counts = 1000000;
 curandState* random_state;
-int** test;
+
+// material 종류 나타내는 열거체
+enum mat {
+	LAMBERTIAN, METAL, DIELECTRIC, LIGHT
+};
+
+__constant__ int spp = 1;
+__constant__ int depth = 5;
+__constant__ float rate = 1.0f;
 
 // convert floating point rgb color to 8-bit integer
 __device__ float clamp(float x, float a, float b) { return max(a, min(b, x)); }
@@ -99,24 +109,22 @@ __global__ void CalculatePerPixel(bvh_node** bvh_tree, camera** camera, curandSt
 	curandState local_rand_state = global_rand_state[index];
 	vec3 color(0, 0, 0);
 
-	int depth = (*camera)->max_depth;
-	int spp = (*camera)->samples_per_pixel;
-	float rate = 1 / float(spp);
 	ray r = (*camera)->get_ray(&local_rand_state, i, j);
-	for (int i = 0; i < spp; i++) {
+	//for (int i = 0; i < spp; i++) {
 		color += (*camera)->ray_color(&local_rand_state, r, depth, bvh_tree);
-	}
-	color *= rate;
+	//}
+	//color *= rate;
 	global_rand_state[index] = local_rand_state;
 	g_odata[i + j * imgw] = vectorgb(color);
 }
+
 __global__ void initCamera(camera** ca, unsigned char* background_image, int iw, int ih) {
 	*ca = new camera(16.0 / 9.0, //종횡비
 		1600,                    //이미지 가로길이
-		1,                       //픽셀당 샘플수
-		5,                      //반사 횟수
+		spp,                       //픽셀당 샘플수
+		depth,                      //반사 횟수
 		90,                      //시야각
-		vec3(-20, 0, 0),         //카메라 위치 
+		vec3(-20, 5, 0),         //카메라 위치 
 		vec3(0, 0, -1),          //바라보는곳
 		vec3(0, 1, 0),           //업벡터
 		vec3(0.5f, 0.7f, 1));      //배경색
@@ -125,37 +133,56 @@ __global__ void initCamera(camera** ca, unsigned char* background_image, int iw,
 __global__ void initWorld(hittable_list** world, int object_counts) {
 	(*world) = new hittable_list(object_counts);
 }
+
 #define RND (curand_uniform(&local_rand_state))
 __global__ void addObjects(curandState* global_state, hittable_list** world, int object_counts) {
 	curand_init(0, 0, 0, &global_state[0]);
 	curandState local_rand_state = *global_state;
-	(*world)->add(new sphere(vec3(0, -1000.0, 0), 1000, new lambertian(vec3(0.5, 0.5, 0.5))));
+	//(*world)->add(new sphere(vec3(0, -1000.0, 0), 1000, new lambertian(vec3(0.5, 0.5, 0.5))));
+	(*world)->add(new quad(vec3(-250, 0, -250.0), vec3(500.0, 0, 0), vec3(0, 0, 500.0), new metal(vec3(0.5, 0.7, 0.8), 0)));
 
 	//(*world)->add(new triangle(vec3(50, 50, 50), vec3(-50, 50, 50), vec3(50, -50, 50), new metal(vec3(0.5, 0.7, 0.8),0)));
 
 	(*world)->add(new sphere(vec3(0, 200, 0), 100, new light(vec3(1, 1, 1))));
-	int sphere_count = 10;
+
+	int sphere_count = 2;
 	for (int a = -sphere_count; a < sphere_count; a++) {
 		for (int b = -sphere_count; b < sphere_count; b++) {
 			float choose_mat = RND;
-			vec3 center(a + RND, 0.2, b + RND);
+			vec3 center(a + RND, (RND + 1) * (RND + 1), b + RND);
 			if (choose_mat < 0.8f) {
-				(*world)->add(new sphere(center, 0.2, new lambertian(vec3(RND * RND, RND * RND, RND * RND))));
+				(*world)->add(new sphere(center, 0.2, new metal(vec3(0.5f * (1.0f + RND), 0.5f * (1.0f + RND), 0.5f * (1.0f + RND)), 0.0f/*0.5f * RND*/)));
 			}
 			else if (choose_mat < 0.95f) {
-				(*world)->add(new sphere(center, 0.2, new metal(vec3(0.5f * (1.0f + RND), 0.5f * (1.0f + RND), 0.5f * (1.0f + RND)), 0.0f/*0.5f * RND*/)));
+				(*world)->add(new sphere(center, 0.2, new lambertian(vec3(RND * RND, RND * RND, RND * RND))));
 			}
 			else {
 				(*world)->add(new sphere(center, 0.2, new dielectric(1.5)));
+				(*world)->add_box(center, center + vec3(a + RND, a + RND, a + RND), new metal(vec3(0.1, 0.2, 0.3), 0));
 			}
 		}
 	}
+	(*world)->add_box(vec3(130, 0, 65), vec3(295, 165, 230), new dielectric(1.5));
 }
 
-__global__ void addTriangle(hittable_list** world, vec3* data, int cnt) {
+__global__ void addTriangle(hittable_list** world, vec3* data, int cnt, mat m) {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx >= cnt) { return; }
-	(*world)->add(new triangle(data[idx * 4], data[idx * 4 + 1], data[idx * 4 + 2], new lambertian(data[idx * 4 + 3])), (*world)->now_size + idx);
+
+	switch (m) {
+	case LAMBERTIAN:
+		(*world)->add(new triangle(data[idx * 4], data[idx * 4 + 1], data[idx * 4 + 2], new lambertian(data[idx * 4 + 3])), (*world)->now_size + idx);
+		break;
+	case METAL:
+		(*world)->add(new triangle(data[idx * 4], data[idx * 4 + 1], data[idx * 4 + 2], new metal(data[idx * 4 + 3], 0.0f)), (*world)->now_size + idx);
+		break;
+	case DIELECTRIC:
+		(*world)->add(new triangle(data[idx * 4], data[idx * 4 + 1], data[idx * 4 + 2], new dielectric(1.5)), (*world)->now_size + idx);
+		break;
+	case LIGHT:
+		(*world)->add(new triangle(data[idx * 4], data[idx * 4 + 1], data[idx * 4 + 2], new light(vec3(1,1,1))), (*world)->now_size + idx);
+		break;
+	}
 }
 __global__ void Random_Init(curandState* global_state, int ih) {
 	int tx = threadIdx.x;
@@ -168,7 +195,7 @@ __global__ void Random_Init(curandState* global_state, int ih) {
 	curand_init(pixel_index, 0, 0, &global_state[pixel_index]);
 }
 
-void ReadOBJ(const char* objlist[], int obj_counts,const vec3 translist[],const vec3 scalelist[]) {
+void ReadOBJ(const char* objlist[], int obj_counts,const vec3 translist[],const vec3 scalelist[], const mat matlist[]) {
 	Assimp::Importer importer;
 	for (int c = 0; c < obj_counts; c++) {
 		char str[100] = "resource/";
@@ -181,6 +208,7 @@ void ReadOBJ(const char* objlist[], int obj_counts,const vec3 translist[],const 
 		}
 		vec3 translate = translist[c];
 		vec3 scale = scalelist[c];
+		mat material = matlist[c];
 
 		vec3* obj_data;
 		vec3* kernel_obj_data;
@@ -195,7 +223,7 @@ void ReadOBJ(const char* objlist[], int obj_counts,const vec3 translist[],const 
 				vec3 a(mesh->mVertices[Face.mIndices[0]].x, mesh->mVertices[Face.mIndices[0]].y, mesh->mVertices[Face.mIndices[0]].z);
 				vec3 b(mesh->mVertices[Face.mIndices[1]].x, mesh->mVertices[Face.mIndices[1]].y, mesh->mVertices[Face.mIndices[1]].z);
 				vec3 c(mesh->mVertices[Face.mIndices[2]].x, mesh->mVertices[Face.mIndices[2]].y, mesh->mVertices[Face.mIndices[2]].z);
-				a *= scale;				b *= scale;				c *= scale;
+				a *= scale;			b *= scale;			c *= scale;
 				a += translate;		b += translate;		c += translate;
 				aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
 				aiColor4D diffuse,specular,ambient;
@@ -214,7 +242,7 @@ void ReadOBJ(const char* objlist[], int obj_counts,const vec3 translist[],const 
 		}
 		cudaMemcpy(kernel_obj_data, obj_data, cnt * 4 * sizeof(vec3), cudaMemcpyHostToDevice);
 		printf("triangle world에 추가중\n");
-		addTriangle << <cnt / 32 + 1, 256 >> > (world, kernel_obj_data, cnt);
+		addTriangle << <cnt / 32 + 1, 256 >> > (world, kernel_obj_data, cnt, material);
 		cudaDeviceSynchronize();
 		add_object_count << <1, 1 >> > (world, cnt);
 	}
@@ -247,7 +275,8 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 	const char* objlist[] = { "Grenade.obj","Skull.obj","Chair.obj","buff-doge.obj","cheems.obj"};      //읽을 OBJ 리스트, 및의 배열들과 순서 맞춰야함
 	const vec3 translist[] = { vec3(10.0f,10.0f,0.0f),vec3(0.0f,0.0f,0.0f),vec3(0.0f,0.0f,5.0f) ,vec3(0.0f,0.0f,0.0f),vec3(0.0f,0.0f,5.0f) };  //위에서 읽을 OBJ를 옮겨주는 벡터
 	const vec3 scalelist[] = { vec3(0.5f,0.5f,0.5f),vec3(0.5f,0.5f,0.5f),vec3(0.5f,0.5f,0.5f),vec3(0.5f,0.5f,0.5f),vec3(1.0f,1.0f,1.0f) };   //위에서 읽을 OBJ의 크기를 바꿔주는 벡터
-	ReadOBJ(objlist, 5, translist, scalelist);
+	const mat matlist[] = { METAL, DIELECTRIC, LAMBERTIAN, METAL, DIELECTRIC };
+	//ReadOBJ(objlist, 5, translist, scalelist, matlist);
 	
 	//여기까지 OBJ 읽기
 	curandState* objectinit;
