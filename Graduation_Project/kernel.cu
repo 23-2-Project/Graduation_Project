@@ -17,6 +17,7 @@
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
+#include <fstream>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -65,7 +66,8 @@ extern "C" void RotateCamera(int x, int y) {
 extern "C" void manivfov(int x) {
 	ManipulateVFOV << <1, 1 >> > (cam, x);
 }
-extern "C" void constructBVH() {
+
+void constructBVH() {
 	// object 개수 구하기
 	int object_count;
 	int* kernel_value;
@@ -250,9 +252,7 @@ void ReadOBJ(const char* objlist[], int obj_counts,const vec3 translist[],const 
 	}
 }
 
-extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_width, int pixels) {
-	//cudaDeviceSetLimit(cudaLimitStackSize, 256 * 1024 * 1024);
-	
+void initCuda(dim3 grid, dim3 block, int image_height, int image_width, int pixels) {
 	cudaMalloc(&random_state, pixels * sizeof(curandState));
 	Random_Init << <grid, block, 0 >> > (random_state, image_height);
 
@@ -292,7 +292,8 @@ extern "C" void initCuda(dim3 grid, dim3 block, int image_height, int image_widt
 
 	constructBVH();
 }
-extern "C" void generatePixel(dim3 grid, dim3 block, int sbytes,
+
+void generatePixel(dim3 grid, dim3 block, int sbytes,
 	unsigned int* g_odata, int imgh, int imgw) {
 	CalculatePerPixel << <grid, block, sbytes >> > (bvh_tree, cam, random_state, g_odata, imgh, imgw);
 }
@@ -300,24 +301,37 @@ extern "C" void generatePixel(dim3 grid, dim3 block, int sbytes,
 int main() {
 	unsigned int image_width = 1600;
 	unsigned int image_height = 900;
-	unsigned int* out_data;
+	unsigned int *out_data, *out_data_host;
+	
 	dim3 block(16, 16, 1), grid(image_width / block.x, image_height / block.y, 1);
 
 	cudaDeviceSetLimit(cudaLimitMallocHeapSize, 512 * 1024 * 1024);
 	cudaMalloc(&out_data, image_width * image_height * sizeof(unsigned int));
+	out_data_host = (unsigned int*)malloc(image_width * image_height * sizeof(unsigned int));
+
 	initCuda(grid, block, image_height, image_width, image_height * image_width);
 	cudaDeviceSynchronize();
 	generatePixel(grid, block, 0, out_data, image_height, image_width);
 	cudaDeviceSynchronize();
-	std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
+	cudaMemcpy(out_data_host, out_data, image_width * image_height * sizeof(unsigned int), cudaMemcpyDeviceToHost);
+
+	std::ofstream output("output.ppm", std::ios_base::out | std::ios_base::trunc);
+
+	if(!output.is_open()){
+		std::cerr << "파일 생성 실패\n";
+		return 1;
+	}
+
+	output << "P3\n" << image_width << ' ' << image_height << "\n255\n";
 	for (int j = image_height - 1; j >= 0; --j) {
 		for (int i = 0; i < image_width; i++) {
 			size_t pixel_index = i + j * image_width;
-			unsigned int ir = (out_data[pixel_index] & 0x00ff0000) >> 16;
-			unsigned int ig = (out_data[pixel_index] & 0x0000ff00) >> 8;
-			unsigned int ib = (out_data[pixel_index] & 0x000000ff);
-			std::cout << ir << ' ' << ig << ' ' << ib << '\n';
+			unsigned int ir = (out_data_host[pixel_index] & 0x00ff0000) >> 16;
+			unsigned int ig = (out_data_host[pixel_index] & 0x0000ff00) >> 8;
+			unsigned int ib = (out_data_host[pixel_index] & 0x000000ff);
+			output << ir << ' ' << ig << ' ' << ib << '\n';
 		}
 	}
+	output.close();
 	return 0;
 }
