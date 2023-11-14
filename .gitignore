@@ -369,3 +369,8 @@ FodyWeavers.xsd
 Graduation_Project/Graduation_Project.vcxproj
 Graduation_Project/Graduation_Project.vcxproj.filters
 Graduation_Project/Graduation_Project.vcxproj.users
+Graduation_Project/resources
+*.zip
+*.obj
+*.mtl
+
