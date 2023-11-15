@@ -331,9 +331,9 @@ int main() {
 	for (int j = image_height - 1; j >= 0; --j) {
 		for (int i = 0; i < image_width; i++) {
 			size_t pixel_index = i + j * image_width;
-			unsigned int ir = (out_data_host[pixel_index] & 0x00ff0000) >> 16;
+			unsigned int ib = (out_data_host[pixel_index] & 0x00ff0000) >> 16;
 			unsigned int ig = (out_data_host[pixel_index] & 0x0000ff00) >> 8;
-			unsigned int ib = (out_data_host[pixel_index] & 0x000000ff);
+			unsigned int ir = (out_data_host[pixel_index] & 0x000000ff);
 			output << ir << ' ' << ig << ' ' << ib << '\n';
 		}
 	}
